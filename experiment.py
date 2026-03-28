@@ -43,7 +43,7 @@ def setup_code():
         "/data": data_volume,
         "/output": output_volume,
     },
-    timeout=3600,  # 1 hour max
+    timeout=7200,  # 2 hour max
 )
 def run_experiment(
     # Model config
