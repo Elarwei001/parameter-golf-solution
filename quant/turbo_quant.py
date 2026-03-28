@@ -38,7 +38,8 @@ class PolarQuant:
     
     def quantize_tensor(self, tensor: torch.Tensor) -> Dict:
         """
-        Quantize a tensor using PolarQuant.
+        Quantize a tensor using per-channel symmetric quantization.
+        Simpler and more accurate than full rotation-based approach.
         
         Returns:
             dict with quantized data and metadata for reconstruction
@@ -46,7 +47,7 @@ class PolarQuant:
         original_shape = tensor.shape
         device = tensor.device
         
-        # Flatten to 2D for rotation
+        # Flatten to 2D
         if tensor.dim() == 1:
             flat = tensor.unsqueeze(0)
         else:
@@ -54,20 +55,16 @@ class PolarQuant:
         
         rows, cols = flat.shape
         
-        # Get rotation matrix
-        R = self._get_rotation_matrix(cols, device)
+        # Per-row symmetric quantization (no rotation - simpler & better)
+        # Find max absolute value per row
+        scale = flat.abs().max(dim=1, keepdim=True)[0].clamp(min=1e-8)
+        normalized = flat / scale  # Now in [-1, 1]
         
-        # Rotate
-        rotated = flat @ R
-        
-        # Compute scale per row (for better precision)
-        scale = rotated.abs().max(dim=1, keepdim=True)[0].clamp(min=1e-8)
-        normalized = rotated / scale
-        
-        # Quantize to n_levels
-        # Map [-1, 1] → [0, n_levels-1]
-        quantized = ((normalized + 1) / 2 * (self.n_levels - 1)).round().clamp(0, self.n_levels - 1)
-        quantized = quantized.to(torch.uint8)
+        # Symmetric quantization: map [-1, 1] → [0, n_levels-1]
+        # Use floor((x + 1) / 2 * (n_levels - 1) + 0.5) for better rounding
+        half_levels = (self.n_levels - 1) / 2
+        quantized = ((normalized * half_levels) + half_levels).round()
+        quantized = quantized.clamp(0, self.n_levels - 1).to(torch.uint8)
         
         return {
             'data': quantized,
@@ -82,20 +79,14 @@ class PolarQuant:
         """Reconstruct tensor from quantized data."""
         data = quant_dict['data'].float()
         scale = quant_dict['scale'].float().unsqueeze(-1)
-        rows, cols = quant_dict['rows'], quant_dict['cols']
         original_shape = quant_dict['shape']
         
-        device = data.device
-        
-        # Dequantize
-        normalized = (data / (self.n_levels - 1)) * 2 - 1
+        # Dequantize: reverse the symmetric quantization
+        half_levels = (self.n_levels - 1) / 2
+        normalized = (data - half_levels) / half_levels  # Back to [-1, 1]
         
         # Unscale
-        rotated = normalized * scale
-        
-        # Inverse rotation
-        R = self._get_rotation_matrix(cols, device)
-        flat = rotated @ R.T
+        flat = normalized * scale
         
         # Reshape
         return flat.reshape(original_shape)
