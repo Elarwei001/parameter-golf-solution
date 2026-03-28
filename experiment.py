@@ -156,18 +156,45 @@ def run_experiment(
     
     # Optimizer
     if optimizer_type == "muon":
-        from optimizers.muon import Muon, MuonWithAdamW
-        print(f"Using Muon optimizer (momentum={muon_momentum})")
-        optimizer = MuonWithAdamW(
-            model.parameters(),
-            lr=learning_rate,
-            momentum=muon_momentum,
-            nesterov=True,
-            ns_steps=5,
-            adamw_lr=learning_rate * 0.1,  # Lower LR for 1D params
-            weight_decay=0.01,
-        )
-    else:
+        # Try PyTorch's built-in Muon first, fallback to AdamW
+        try:
+            print(f"Using PyTorch Muon optimizer (momentum={muon_momentum})")
+            
+            # Separate 2D and 1D params (Muon for 2D, AdamW for 1D)
+            muon_params = []
+            adamw_params = []
+            for name, p in model.named_parameters():
+                if p.dim() == 2:
+                    muon_params.append(p)
+                else:
+                    adamw_params.append(p)
+            
+            print(f"  Muon params: {len(muon_params)}, AdamW params: {len(adamw_params)}")
+            
+            # Create optimizer groups
+            from torch.optim import Muon, AdamW
+            
+            optimizer = Muon(
+                muon_params,
+                lr=learning_rate,
+                momentum=muon_momentum,
+            )
+            
+            # Add AdamW for 1D params
+            if adamw_params:
+                adamw_opt = AdamW(
+                    adamw_params,
+                    lr=learning_rate * 0.1,
+                    betas=(0.9, 0.95),
+                    weight_decay=0.01,
+                )
+                # We'll step both optimizers
+                optimizer = (optimizer, adamw_opt)
+        except (ImportError, AttributeError) as e:
+            print(f"PyTorch Muon not available ({e}), using AdamW")
+            optimizer_type = "adamw"
+    
+    if optimizer_type == "adamw":
         print(f"Using AdamW optimizer")
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -203,7 +230,13 @@ def run_experiment(
         batch = torch.from_numpy(batch.astype(np.int64)).to(device)
         
         # Forward + backward
-        optimizer.zero_grad()
+        if isinstance(optimizer, tuple):
+            # Dual optimizer (Muon + AdamW)
+            optimizer[0].zero_grad()
+            optimizer[1].zero_grad()
+        else:
+            optimizer.zero_grad()
+            
         if model_type == "latent":
             loss_dict = model.compute_loss(batch, sigreg_weight=sigreg_weight)
         else:
@@ -213,7 +246,11 @@ def run_experiment(
         # Gradient clipping
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         
-        optimizer.step()
+        if isinstance(optimizer, tuple):
+            optimizer[0].step()
+            optimizer[1].step()
+        else:
+            optimizer.step()
         
         losses.append(loss_dict['ce_loss'].item())
         
