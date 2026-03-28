@@ -176,7 +176,7 @@ def run_experiment(
     if resume_from:
         checkpoint_path = f"/output/checkpoints/{resume_from}.pt"
         if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path, map_location=device)
+            checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
             model.load_state_dict(checkpoint['model'])
             if isinstance(optimizer, tuple):
                 optimizer[0].load_state_dict(checkpoint['optimizer'])
@@ -305,10 +305,10 @@ def run_experiment(
         checkpoint_path = f"/output/checkpoints/{experiment_name}.pt"
         checkpoint = {
             'model': model.state_dict(),
-            'step': final_steps,
-            'total_time': total_time,
-            'bpb': final_bpb,
-            'loss': final_loss,
+            'step': int(final_steps),
+            'total_time': float(total_time),
+            'bpb': float(final_bpb),
+            'loss': float(final_loss),
             'config': {
                 'model_type': model_type,
                 'embed_dim': embed_dim,
