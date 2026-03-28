@@ -65,6 +65,9 @@ def run_experiment(
     # Optimizer
     optimizer_type: str = "adamw",  # "adamw" or "muon"
     muon_momentum: float = 0.95,
+    # Checkpoint
+    resume_from: str = "",  # checkpoint name to resume from
+    save_checkpoint: bool = True,  # save checkpoint at end
     # Experiment
     experiment_name: str = "default",
 ):
@@ -203,6 +206,29 @@ def run_experiment(
             weight_decay=0.01,
         )
     
+    # Resume from checkpoint if specified
+    start_step = 0
+    total_time_before = 0
+    
+    if resume_from:
+        checkpoint_path = f"/output/checkpoints/{resume_from}.pt"
+        if os.path.exists(checkpoint_path):
+            print(f"\n📂 Loading checkpoint: {resume_from}")
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint['model'])
+            if isinstance(optimizer, tuple):
+                optimizer[0].load_state_dict(checkpoint['optimizer'])
+                if 'optimizer2' in checkpoint:
+                    optimizer[1].load_state_dict(checkpoint['optimizer2'])
+            else:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+            start_step = checkpoint['step']
+            total_time_before = checkpoint.get('total_time', 0)
+            print(f"  Resumed from step {start_step}, previous time: {total_time_before:.1f}s")
+            print(f"  Previous BPB: {checkpoint.get('bpb', 'N/A')}")
+        else:
+            print(f"⚠️  Checkpoint not found: {checkpoint_path}")
+    
     # Training loop
     print("\nStarting training...")
     start_time = time.time()
@@ -210,7 +236,7 @@ def run_experiment(
     model.train()
     losses = []
     
-    for step in range(max_steps):
+    for step in range(start_step, max_steps):
         # Check time limit
         elapsed = time.time() - start_time
         if elapsed >= max_seconds:
@@ -297,6 +323,39 @@ def run_experiment(
     print(f"Final BPB: {final_bpb:.4f}")
     print(f"Model size (3-bit): {size_3bit:.2f} MB")
     
+    # Save checkpoint for resuming
+    total_time = total_time_before + elapsed
+    
+    if save_checkpoint:
+        os.makedirs("/output/checkpoints", exist_ok=True)
+        checkpoint_path = f"/output/checkpoints/{experiment_name}.pt"
+        checkpoint = {
+            'model': model.state_dict(),
+            'step': final_steps,
+            'total_time': total_time,
+            'bpb': final_bpb,
+            'loss': final_loss,
+            'config': {
+                'model_type': model_type,
+                'embed_dim': embed_dim,
+                'n_layers': n_layers,
+                'n_heads': n_heads,
+                'n_kv_heads': n_kv_heads,
+                'vocab_size': vocab_size,
+            }
+        }
+        if isinstance(optimizer, tuple):
+            checkpoint['optimizer'] = optimizer[0].state_dict()
+            checkpoint['optimizer2'] = optimizer[1].state_dict()
+        else:
+            checkpoint['optimizer'] = optimizer.state_dict()
+        
+        torch.save(checkpoint, checkpoint_path)
+        print(f"\n💾 Checkpoint saved: {experiment_name}")
+        print(f"   Total steps: {final_steps}, Total time: {total_time:.1f}s")
+    
+    output_volume.commit()
+    
     # Save results
     result = {
         "status": "ok",
@@ -319,6 +378,7 @@ def run_experiment(
             "size_3bit_mb": size_3bit,
             "steps": final_steps,
             "time_seconds": elapsed,
+            "total_time_seconds": total_time,
             "final_loss": final_loss,
             "final_bpb": final_bpb,
         }
