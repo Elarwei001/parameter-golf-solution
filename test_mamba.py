@@ -50,20 +50,21 @@ def test_mamba():
         loss = model.compute_loss(batch)
         print(f"Loss: {loss['loss'].item():.4f}")
         
-        # Quick training speed test
+        # Quick training speed test (smaller batch for T4)
         import time
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
         
         start = time.time()
-        for step in range(10):
+        for step in range(5):
             optimizer.zero_grad()
-            batch = torch.randint(0, config.vocab_size, (32, 1025), device=device)
+            batch = torch.randint(0, config.vocab_size, (8, 257), device=device)  # smaller
             loss = model.compute_loss(batch)
             loss['loss'].backward()
             optimizer.step()
+            torch.cuda.empty_cache()
         elapsed = time.time() - start
         
-        print(f"10 steps in {elapsed:.2f}s ({elapsed/10*1000:.0f}ms/step)")
+        print(f"5 steps in {elapsed:.2f}s ({elapsed/5*1000:.0f}ms/step)")
     
     print("\n✅ All Mamba tests passed!")
     return "OK"
