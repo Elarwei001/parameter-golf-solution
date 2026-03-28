@@ -8,8 +8,8 @@ Usage:
     # Run training
     modal run modal_runner.py::train
     
-    # Run with custom config
-    modal run modal_runner.py::train --latent-dim 128 --n-layers 12
+    # Test model on GPU
+    modal run modal_runner.py::test_model
 """
 import modal
 import os
@@ -20,6 +20,7 @@ app = modal.App("parameter-golf")
 # Create image with dependencies
 image = (
     modal.Image.debian_slim(python_version="3.11")
+    .apt_install(["git"])
     .pip_install([
         "torch>=2.0",
         "numpy",
@@ -35,6 +36,20 @@ image = (
 data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=True)
 output_volume = modal.Volume.from_name("parameter-golf-output", create_if_missing=True)
 
+# GitHub repo for our code
+CODE_REPO = "https://github.com/Elarwei001/parameter-golf-solution.git"
+
+
+def setup_code():
+    """Clone our code repo to /root/project"""
+    import subprocess
+    if not os.path.exists("/root/project"):
+        subprocess.run([
+            "git", "clone", CODE_REPO, "/root/project"
+        ], check=True)
+    import sys
+    sys.path.insert(0, "/root/project")
+
 
 @app.function(
     image=image,
@@ -45,19 +60,24 @@ def download_data(variant: str = "sp1024", train_shards: int = 10):
     """Download FineWeb dataset to Modal volume"""
     import subprocess
     
-    # Clone repo
+    # Clone official repo
     subprocess.run([
         "git", "clone", "https://github.com/openai/parameter-golf.git",
         "/tmp/parameter-golf"
     ], check=True)
     
-    # Download data
+    # Download data (positional: train_shards, then --variant)
+    os.chdir("/tmp/parameter-golf/data")
     subprocess.run([
-        "python", "/tmp/parameter-golf/data/cached_challenge_fineweb.py",
+        "python", "cached_challenge_fineweb.py",
+        str(train_shards),
         "--variant", variant,
-        "--train-shards", str(train_shards),
-        "--output-dir", "/data"
     ], check=True)
+    
+    # Copy data to volume
+    import shutil
+    shutil.copytree("/tmp/parameter-golf/data/datasets", "/data/datasets", dirs_exist_ok=True)
+    shutil.copytree("/tmp/parameter-golf/data/tokenizers", "/data/tokenizers", dirs_exist_ok=True)
     
     # Commit volume
     data_volume.commit()
@@ -68,45 +88,26 @@ def download_data(variant: str = "sp1024", train_shards: int = 10):
 
 @app.function(
     image=image,
-    gpu="A100",  # or "H100" for faster training
+    gpu="A100",
     volumes={
         "/data": data_volume,
         "/output": output_volume,
     },
-    timeout=900,  # 15 min max
+    timeout=900,
 )
 def train(
     latent_dim: int = 64,
     n_layers: int = 8,
-    seq_length: int = 1024,
-    batch_size: int = 64,
     max_seconds: int = 300,
-    sigreg_weight: float = 0.1,
     debug: bool = False,
 ):
-    """
-    Run training on Modal.
-    
-    Args:
-        latent_dim: Latent space dimension
-        n_layers: Number of predictor layers
-        seq_length: Sequence length
-        batch_size: Batch size
-        max_seconds: Max training time in seconds
-        sigreg_weight: Weight for SIGReg loss
-        debug: Use small config for debugging
-    """
-    import sys
-    sys.path.insert(0, "/tmp/solution")
-    
-    # Copy solution code to /tmp (Modal mounts are read-only)
-    import shutil
-    # In practice, we'd copy from the local mount
-    # For now, we'll import directly
+    """Run training on Modal"""
+    setup_code()
     
     from configs.base import Config, ModelConfig, TrainingConfig, get_debug_config
-    from adapters.modal_adapter import ModalAdapter
-    from train_core import Trainer
+    from models.latent_lm import LatentLM
+    
+    import torch
     
     # Build config
     if debug:
@@ -118,28 +119,33 @@ def train(
                 n_layers=n_layers,
             ),
             training=TrainingConfig(
-                seq_length=seq_length,
-                batch_size=batch_size,
                 max_wallclock_seconds=max_seconds,
-                sigreg_weight=sigreg_weight,
             ),
         )
     
-    # Create adapter
-    adapter = ModalAdapter(config)
+    # Create model
+    model = LatentLM(config.model).cuda()
     
-    # TODO: Create dataloaders
-    # For now, just test model creation
-    trainer = Trainer(config, adapter)
+    n_params = model.count_parameters()
+    print(f"✅ Model created on GPU!")
+    print(f"Parameters: {n_params:,}")
+    print(f"Estimated 3-bit size: {model.estimate_size(3):.2f} MB")
+    print(f"Device: {next(model.parameters()).device}")
     
-    print("✅ Model created successfully!")
-    print(f"Parameters: {trainer.model.count_parameters():,}")
-    print(f"Estimated 3-bit size: {trainer.model.estimate_size(3):.2f} MB")
+    # Quick forward pass test
+    batch = torch.randint(0, config.model.vocab_size, (2, 256)).cuda()
+    logits, z = model(batch)
+    print(f"Forward pass: input {batch.shape} → logits {logits.shape}")
     
-    # TODO: Add actual training with dataloaders
-    # result = trainer.train(train_loader, val_loader)
+    # Test loss computation
+    loss_dict = model.compute_loss(batch)
+    print(f"Loss: {loss_dict['loss'].item():.4f}")
     
-    return {"status": "ok", "params": trainer.model.count_parameters()}
+    return {
+        "status": "ok",
+        "params": n_params,
+        "size_3bit_mb": model.estimate_size(3),
+    }
 
 
 @app.function(
@@ -149,13 +155,10 @@ def train(
     timeout=120,
 )
 def test_model():
-    """Quick test to verify model works"""
+    """Quick test to verify model works on GPU"""
+    setup_code()
+    
     import torch
-    
-    # Import local modules
-    import sys
-    sys.path.insert(0, ".")
-    
     from configs.base import get_debug_config
     from models.latent_lm import LatentLM
     
@@ -177,7 +180,13 @@ def test_model():
     print(f"CE Loss: {loss_dict['ce_loss'].item():.4f}")
     print(f"SIGReg Loss: {loss_dict['sigreg_loss'].item():.4f}")
     
-    return {"status": "ok"}
+    # Model size info
+    n_params = model.count_parameters()
+    print(f"\nModel parameters: {n_params:,}")
+    print(f"FP16 size: {model.estimate_size(16):.2f} MB")
+    print(f"3-bit size: {model.estimate_size(3):.2f} MB")
+    
+    return {"status": "ok", "params": n_params}
 
 
 @app.local_entrypoint()
