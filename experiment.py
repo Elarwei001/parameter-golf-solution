@@ -83,10 +83,7 @@ def run_experiment(
     from models.latent_lm import LatentLM
     from models.standard_gpt import StandardGPT
     
-    print("=" * 60)
-    print(f"Experiment: {experiment_name}")
-    print(f"Model: {model_type}, dim={embed_dim}, layers={n_layers}, lr={learning_rate}")
-    print("=" * 60)
+    print(f"🚀 {experiment_name}: {model_type}, dim={embed_dim}, layers={n_layers}")
     
     # Create model based on type
     device = torch.device("cuda")
@@ -118,8 +115,7 @@ def run_experiment(
     n_params = model.count_parameters()
     size_3bit = model.estimate_size(3)
     
-    print(f"Model parameters: {n_params:,}")
-    print(f"Estimated 3-bit size: {size_3bit:.2f} MB")
+    print(f"📊 {n_params/1e6:.1f}M params, {size_3bit:.1f}MB @ 3-bit")
     
     if size_3bit > 16:
         print(f"⚠️  WARNING: Model too large for 16MB limit!")
@@ -130,8 +126,7 @@ def run_experiment(
             "size_3bit_mb": size_3bit,
         }
     
-    # Load data
-    print("\nLoading data...")
+    # Load data (silent)
     data_path = "/data/datasets/fineweb10B_sp1024"
     train_files = sorted([f for f in os.listdir(data_path) if "train" in f])
     
@@ -146,7 +141,6 @@ def run_experiment(
         shard_data = np.memmap(train_path, dtype=np.uint16, mode='r')
         all_data.append(shard_data)
         total_tokens += len(shard_data)
-        print(f"  Loaded {f}: {len(shard_data):,} tokens")
     
     # Concatenate (use first shard for simplicity if memory constrained)
     if len(all_data) == 1:
@@ -155,56 +149,25 @@ def run_experiment(
         # Randomly sample from shards during training
         train_data = all_data  # Keep as list
     
-    print(f"Total training tokens: {total_tokens:,}")
+    print(f"📚 {total_tokens/1e6:.0f}M tokens loaded")
     
-    # Optimizer
+    # Optimizer (silent setup)
     if optimizer_type == "muon":
-        # Try PyTorch's built-in Muon first, fallback to AdamW
         try:
-            print(f"Using PyTorch Muon optimizer (momentum={muon_momentum})")
-            
-            # Separate 2D and 1D params (Muon for 2D, AdamW for 1D)
-            muon_params = []
-            adamw_params = []
-            for name, p in model.named_parameters():
-                if p.dim() == 2:
-                    muon_params.append(p)
-                else:
-                    adamw_params.append(p)
-            
-            print(f"  Muon params: {len(muon_params)}, AdamW params: {len(adamw_params)}")
-            
-            # Create optimizer groups
+            muon_params = [p for p in model.parameters() if p.dim() == 2]
+            adamw_params = [p for p in model.parameters() if p.dim() != 2]
             from torch.optim import Muon, AdamW
-            
-            optimizer = Muon(
-                muon_params,
-                lr=learning_rate,
-                momentum=muon_momentum,
-            )
-            
-            # Add AdamW for 1D params
+            optimizer = Muon(muon_params, lr=learning_rate, momentum=muon_momentum)
             if adamw_params:
-                adamw_opt = AdamW(
-                    adamw_params,
-                    lr=learning_rate * 0.1,
-                    betas=(0.9, 0.95),
-                    weight_decay=0.01,
-                )
-                # We'll step both optimizers
+                adamw_opt = AdamW(adamw_params, lr=learning_rate * 0.1, betas=(0.9, 0.95), weight_decay=0.01)
                 optimizer = (optimizer, adamw_opt)
-        except (ImportError, AttributeError) as e:
-            print(f"PyTorch Muon not available ({e}), using AdamW")
+            print(f"⚡ Muon optimizer")
+        except (ImportError, AttributeError):
             optimizer_type = "adamw"
     
     if optimizer_type == "adamw":
-        print(f"Using AdamW optimizer")
-        optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=learning_rate,
-            betas=(0.9, 0.95),
-            weight_decay=0.01,
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, betas=(0.9, 0.95), weight_decay=0.01)
+        print(f"⚡ AdamW optimizer")
     
     # Resume from checkpoint if specified
     start_step = 0
@@ -213,7 +176,6 @@ def run_experiment(
     if resume_from:
         checkpoint_path = f"/output/checkpoints/{resume_from}.pt"
         if os.path.exists(checkpoint_path):
-            print(f"\n📂 Loading checkpoint: {resume_from}")
             checkpoint = torch.load(checkpoint_path, map_location=device)
             model.load_state_dict(checkpoint['model'])
             if isinstance(optimizer, tuple):
@@ -224,13 +186,13 @@ def run_experiment(
                 optimizer.load_state_dict(checkpoint['optimizer'])
             start_step = checkpoint['step']
             total_time_before = checkpoint.get('total_time', 0)
-            print(f"  Resumed from step {start_step}, previous time: {total_time_before:.1f}s")
-            print(f"  Previous BPB: {checkpoint.get('bpb', 'N/A')}")
+            prev_bpb = checkpoint.get('bpb', 0)
+            print(f"📂 Resumed: step {start_step}, {total_time_before/60:.0f}min, BPB {prev_bpb:.2f}")
         else:
-            print(f"⚠️  Checkpoint not found: {checkpoint_path}")
+            print(f"⚠️ Checkpoint not found: {checkpoint_path}")
     
     # Training loop
-    print("\nStarting training...")
+    print(f"🏃 Training for {max_seconds/60:.0f}min...")
     start_time = time.time()
     
     model.train()
@@ -240,7 +202,6 @@ def run_experiment(
         # Check time limit
         elapsed = time.time() - start_time
         if elapsed >= max_seconds:
-            print(f"\nTime limit reached ({elapsed:.1f}s)")
             break
         
         # Sample random batch
@@ -280,10 +241,12 @@ def run_experiment(
         
         losses.append(loss_dict['ce_loss'].item())
         
-        if step % 50 == 0:
+        # Only log every 500 steps to reduce output (was 50)
+        if step % 500 == 0:
             avg_loss = np.mean(losses[-50:]) if losses else 0
             bpb = avg_loss / math.log(2)
-            print(f"step {step:4d} | loss {avg_loss:.4f} | bpb {bpb:.4f} | time {elapsed:.1f}s")
+            mins = elapsed / 60
+            print(f"[{mins:.0f}min] step {step}, BPB {bpb:.2f}")
     
     # Final evaluation
     final_steps = step + 1
@@ -314,14 +277,10 @@ def run_experiment(
     final_loss = np.mean(val_losses)
     final_bpb = final_loss / math.log(2)
     
-    print("\n" + "=" * 60)
-    print("RESULTS")
-    print("=" * 60)
-    print(f"Steps completed: {final_steps}")
-    print(f"Time elapsed: {elapsed:.1f}s")
-    print(f"Final loss: {final_loss:.4f}")
-    print(f"Final BPB: {final_bpb:.4f}")
-    print(f"Model size (3-bit): {size_3bit:.2f} MB")
+    # Compact summary (reduces token usage in chat)
+    mins = elapsed / 60
+    total_mins = total_time_before / 60 + mins
+    print(f"\n✅ {experiment_name}: {final_steps} steps, {mins:.0f}min (total {total_mins:.0f}min), BPB {final_bpb:.2f}, size {size_3bit:.1f}MB")
     
     # Save checkpoint for resuming
     total_time = total_time_before + elapsed
@@ -351,8 +310,7 @@ def run_experiment(
             checkpoint['optimizer'] = optimizer.state_dict()
         
         torch.save(checkpoint, checkpoint_path)
-        print(f"\n💾 Checkpoint saved: {experiment_name}")
-        print(f"   Total steps: {final_steps}, Total time: {total_time:.1f}s")
+        print(f"💾 Checkpoint saved")
     
     output_volume.commit()
     
@@ -389,7 +347,6 @@ def run_experiment(
     result_path = f"/output/experiments/{experiment_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(result_path, 'w') as f:
         json.dump(result, f, indent=2)
-    print(f"\nResults saved to {result_path}")
     
     output_volume.commit()
     
