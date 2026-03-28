@@ -47,7 +47,7 @@ def setup_code():
 )
 def run_experiment(
     # Model config
-    model_type: str = "latent",  # "latent" or "standard"
+    model_type: str = "latent",  # "latent", "standard", or "shared"
     latent_dim: int = 64,
     n_layers: int = 8,
     n_heads: int = 8,
@@ -55,6 +55,9 @@ def run_experiment(
     mlp_ratio: float = 4.0,
     embed_dim: int = 256,
     vocab_size: int = 1024,
+    # Weight-sharing params (model_type="shared")
+    shared_layers: int = 3,   # unique layers
+    n_passes: int = 3,        # cycles per forward pass
     # Training config
     seq_length: int = 1024,
     batch_size: int = 32,
@@ -110,6 +113,20 @@ def run_experiment(
             mlp_mult=int(mlp_ratio),
             max_seq_len=seq_length,
             tie_embeddings=True,
+        ).to(device)
+    elif model_type == "shared":
+        # Universal Transformer weight-sharing
+        model = StandardGPT(
+            vocab_size=vocab_size,
+            dim=embed_dim,
+            n_layers=n_layers,   # ignored when shared_layers > 0
+            n_heads=n_heads,
+            n_kv_heads=n_kv_heads,
+            mlp_mult=int(mlp_ratio),
+            max_seq_len=seq_length,
+            tie_embeddings=True,
+            shared_layers=shared_layers,
+            n_passes=n_passes,
         ).to(device)
     else:
         config = Config(
@@ -244,7 +261,7 @@ def run_experiment(
             
         if model_type == "latent":
             loss_dict = model.compute_loss(batch, sigreg_weight=sigreg_weight)
-        elif model_type in ("standard", "mamba"):
+        elif model_type in ("standard", "mamba", "shared"):
             loss_dict = model.compute_loss(batch)
         else:
             loss_dict = model.compute_loss(batch)
@@ -299,7 +316,7 @@ def run_experiment(
             
             if model_type == "latent":
                 loss_dict = model.compute_loss(batch, sigreg_weight=0)
-            elif model_type in ("standard", "mamba"):
+            elif model_type in ("standard", "mamba", "shared"):
                 loss_dict = model.compute_loss(batch)
             else:
                 loss_dict = model.compute_loss(batch)

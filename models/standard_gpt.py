@@ -1,6 +1,9 @@
 """
 Standard GPT model for comparison.
 Based on official baseline architecture but simplified.
+
+Supports Universal Transformer-style weight sharing via:
+  shared_layers=3, n_passes=3 → 3 unique layers cycled 3 times = 9 effective depth
 """
 import math
 import torch
@@ -127,6 +130,12 @@ class StandardGPT(nn.Module):
     """
     Standard GPT model (not latent-based).
     For comparison with LatentLM.
+
+    Weight-sharing (Universal Transformer style):
+      If shared_layers > 0, create `shared_layers` unique Block objects
+      and cycle through them `n_passes` times in forward.
+      Effective depth = shared_layers * n_passes.
+      n_layers is ignored when shared_layers > 0.
     """
     def __init__(
         self,
@@ -138,34 +147,49 @@ class StandardGPT(nn.Module):
         mlp_mult: int = 4,
         max_seq_len: int = 1024,
         tie_embeddings: bool = True,
+        # Weight-sharing params (Universal Transformer style)
+        shared_layers: int = 0,   # 0 = disabled (standard behavior)
+        n_passes: int = 1,        # number of times to cycle shared layers
     ):
         super().__init__()
         self.vocab_size = vocab_size
         self.dim = dim
         self.tie_embeddings = tie_embeddings
-        
+        self.shared_layers = shared_layers
+        self.n_passes = n_passes
+
         self.tok_emb = nn.Embedding(vocab_size, dim)
         self.rope = RotaryEmbedding(dim // n_heads, max_seq_len)
-        
-        self.blocks = nn.ModuleList([
-            Block(dim, n_heads, n_kv_heads, mlp_mult)
-            for _ in range(n_layers)
-        ])
-        
+
+        if shared_layers > 0:
+            # Weight-sharing mode: create shared_layers unique blocks
+            self.blocks = nn.ModuleList([
+                Block(dim, n_heads, n_kv_heads, mlp_mult)
+                for _ in range(shared_layers)
+            ])
+            self._effective_depth = shared_layers * n_passes
+        else:
+            # Standard mode: n_layers independent blocks
+            self.blocks = nn.ModuleList([
+                Block(dim, n_heads, n_kv_heads, mlp_mult)
+                for _ in range(n_layers)
+            ])
+            self._effective_depth = n_layers
+
         self.ln_f = RMSNorm(dim)
-        
+
         if not tie_embeddings:
             self.lm_head = nn.Linear(dim, vocab_size, bias=False)
-        
+
         self._init_weights()
-    
+
     def _init_weights(self):
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.normal_(module.weight, std=0.02)
             elif isinstance(module, nn.Embedding):
                 nn.init.normal_(module.weight, std=0.02)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -174,41 +198,47 @@ class StandardGPT(nn.Module):
             logits: [batch, seq_len, vocab_size]
         """
         B, L = x.shape
-        
+
         h = self.tok_emb(x)
         cos, sin = self.rope(h, L)
-        
-        for block in self.blocks:
-            h = block(h, cos, sin)
-        
+
+        if self.shared_layers > 0:
+            # Cycle through shared blocks n_passes times
+            for _ in range(self.n_passes):
+                for block in self.blocks:
+                    h = block(h, cos, sin)
+        else:
+            for block in self.blocks:
+                h = block(h, cos, sin)
+
         h = self.ln_f(h)
-        
+
         if self.tie_embeddings:
             logits = h @ self.tok_emb.weight.T
         else:
             logits = self.lm_head(h)
-        
+
         return logits
-    
+
     def compute_loss(self, token_ids: torch.Tensor) -> dict:
         """Compute cross-entropy loss"""
         logits = self.forward(token_ids[:, :-1])
         targets = token_ids[:, 1:]
-        
+
         loss = F.cross_entropy(
             logits.reshape(-1, self.vocab_size),
             targets.reshape(-1)
         )
-        
+
         return {
             'loss': loss,
             'ce_loss': loss,
             'ppl': torch.exp(loss),
         }
-    
+
     def count_parameters(self) -> int:
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-    
+
     def estimate_size(self, bits: int = 16) -> float:
         n_params = self.count_parameters()
         return (n_params * bits / 8) / (1024 * 1024)
