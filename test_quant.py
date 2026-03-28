@@ -65,15 +65,68 @@ def test_quantization():
     print(f"Parameters: {n_params:,}")
     print(f"FP16 size: {fp16_size:.2f} MB")
     
-    # Test forward pass before quantization
-    test_input = torch.randint(0, 1024, (2, 256)).cuda()
-    with torch.no_grad():
-        output_before = model(test_input)
-        logits_before = output_before[:, -1, :].clone()
+    # Load real data for testing
+    data_path = "/data/datasets/fineweb10B_sp1024"
+    train_files = sorted([f for f in os.listdir(data_path) if "train" in f])
+    train_path = os.path.join(data_path, train_files[0])
+    train_data = np.memmap(train_path, dtype=np.uint16, mode='r')
     
+    # Sample batch
+    batch_starts = np.random.randint(0, len(train_data) - 1025, 16)
+    batch = np.stack([train_data[i:i+1025] for i in batch_starts])
+    batch = torch.from_numpy(batch.astype(np.int64)).cuda()
+    
+    # Get baseline BPB
+    with torch.no_grad():
+        loss_before = model.compute_loss(batch)['ce_loss'].item()
+    bpb_before = loss_before / 0.6931
+    print(f"Baseline (random weights) BPB: {bpb_before:.4f}")
+    
+    # Test different bit widths
+    for bits in [3, 4, 6, 8]:
+        print(f"\n--- Testing {bits}-bit quantization ---")
+        turbo = TurboQuant(bits=bits, use_qjl=False)  # QJL not helping, disable
+        
+        quantized = turbo.quantize_model(model)
+        
+        # Save and get actual size
+        os.makedirs("/output/quant_test", exist_ok=True)
+        actual_size = turbo.save_compressed(quantized, f"/output/quant_test/model_{bits}bit.bin")
+        actual_size_mb = actual_size / (1024**2)
+        
+        # Dequantize
+        model_copy = StandardGPT(
+            vocab_size=1024,
+            dim=512,
+            n_layers=9,
+            n_heads=8,
+            n_kv_heads=4,
+            mlp_mult=4,
+        ).cuda()
+        turbo.dequantize_model(quantized, model_copy)
+        
+        # Compare on real data
+        with torch.no_grad():
+            loss_q = model_copy.compute_loss(batch)['ce_loss'].item()
+        bpb_q = loss_q / 0.6931
+        
+        print(f"  Size: {actual_size_mb:.2f} MB | BPB: {bpb_q:.4f} | Δ: {bpb_q - bpb_before:+.4f}")
+        print(f"  Fits 16MB: {'✅' if actual_size_mb <= 16 else '❌'}")
+    
+    # Pick best configuration
+    print("\n" + "=" * 60)
+    print("Testing complete - pick the best bits/size tradeoff")
+    print("=" * 60)
+    
+    return {"status": "done"}
+
+
+# Old code - keeping for reference but replacing main test
+def _old_test():
     # Quantize
     print("\nQuantizing with TurboQuant (3-bit + QJL)...")
     turbo = TurboQuant(bits=3, use_qjl=True, qjl_projections=32)
+    pass
     quantized = turbo.quantize_model(model)
     
     # Estimate size
