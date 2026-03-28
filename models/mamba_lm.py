@@ -93,33 +93,30 @@ def ssd(x: Tensor, A: Tensor, B: Tensor, C: Tensor, chunk_size: int,
     This is the core Mamba operation - parallel scan over chunks.
     """
     batch, seqlen, nheads, headdim = x.shape
+    d_state = B.shape[-1]
     
     # Pad sequence to chunk_size multiple if needed
     pad_len = (chunk_size - seqlen % chunk_size) % chunk_size
     if pad_len > 0:
         x = F.pad(x, (0, 0, 0, 0, 0, pad_len))
         A = F.pad(A, (0, pad_len))
-        B = F.pad(B, (0, 0, 0, pad_len))
-        C = F.pad(C, (0, 0, 0, pad_len))
+        B = F.pad(B, (0, 0, 0, 0, 0, pad_len))
+        C = F.pad(C, (0, 0, 0, 0, 0, pad_len))
     
-    # Rearrange into chunks: (batch, chunks, chunk_size, ...)
-    def chunk_it(t, pattern):
-        if pattern == "bth":
-            return t.view(batch, -1, chunk_size, nheads).transpose(2, 3)
-        elif pattern == "bthn":
-            return t.view(batch, -1, chunk_size, nheads, -1)
-        elif pattern == "bthp":
-            return t.view(batch, -1, chunk_size, nheads, headdim)
-        
-    x_c = chunk_it(x, "bthp")  # (batch, chunks, chunk_size, nheads, headdim)
-    A_c = chunk_it(A, "bth")    # (batch, chunks, nheads, chunk_size)
-    B_c = chunk_it(B, "bthn")   # (batch, chunks, chunk_size, nheads, d_state)
-    C_c = chunk_it(C, "bthn")
+    new_seqlen = x.shape[1]
+    num_chunks = new_seqlen // chunk_size
+    
+    # Rearrange into chunks
+    x_c = x.view(batch, num_chunks, chunk_size, nheads, headdim)
+    A_c = A.view(batch, num_chunks, chunk_size, nheads).permute(0, 1, 3, 2)  # (b, c, h, l)
+    B_c = B.view(batch, num_chunks, chunk_size, nheads, d_state)
+    C_c = C.view(batch, num_chunks, chunk_size, nheads, d_state)
     
     # Transpose for einsum convenience
     x_c = x_c.permute(0, 1, 3, 2, 4)  # (batch, chunks, nheads, chunk_size, headdim)
     B_c = B_c.permute(0, 1, 3, 2, 4)  # (batch, chunks, nheads, chunk_size, d_state)
     C_c = C_c.permute(0, 1, 3, 2, 4)
+    # A_c is already (batch, chunks, nheads, chunk_size)
     
     A_cumsum = torch.cumsum(A_c, dim=-1)
     
