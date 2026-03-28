@@ -1,0 +1,280 @@
+"""
+AutoResearch-style experiment runner for Parameter Golf.
+Runs experiments on Modal and tracks results.
+"""
+import modal
+import os
+import json
+import time
+from datetime import datetime
+
+app = modal.App("parameter-golf-experiments")
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install(["git"])
+    .pip_install([
+        "torch>=2.0",
+        "numpy",
+        "sentencepiece",
+        "tqdm",
+    ])
+)
+
+data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=True)
+output_volume = modal.Volume.from_name("parameter-golf-output", create_if_missing=True)
+
+CODE_REPO = "https://github.com/Elarwei001/parameter-golf-solution.git"
+
+
+def setup_code():
+    """Clone our code repo"""
+    import subprocess
+    if not os.path.exists("/root/project"):
+        subprocess.run(["git", "clone", CODE_REPO, "/root/project"], check=True)
+    import sys
+    sys.path.insert(0, "/root/project")
+
+
+@app.function(
+    image=image,
+    gpu="A100",
+    volumes={
+        "/data": data_volume,
+        "/output": output_volume,
+    },
+    timeout=900,
+)
+def run_experiment(
+    # Model config
+    latent_dim: int = 64,
+    n_layers: int = 8,
+    n_heads: int = 8,
+    mlp_ratio: float = 4.0,
+    embed_dim: int = 256,
+    vocab_size: int = 1024,
+    # Training config
+    seq_length: int = 1024,
+    batch_size: int = 32,
+    learning_rate: float = 1e-3,
+    sigreg_weight: float = 0.1,
+    max_steps: int = 500,
+    max_seconds: int = 120,
+    # Experiment
+    experiment_name: str = "default",
+):
+    """Run a single experiment with given hyperparameters"""
+    import torch
+    import torch.nn.functional as F
+    import numpy as np
+    import math
+    
+    setup_code()
+    
+    from configs.base import Config, ModelConfig, TrainingConfig
+    from models.latent_lm import LatentLM
+    
+    print("=" * 60)
+    print(f"Experiment: {experiment_name}")
+    print(f"Config: latent_dim={latent_dim}, n_layers={n_layers}, lr={learning_rate}")
+    print("=" * 60)
+    
+    # Build config
+    config = Config(
+        model=ModelConfig(
+            vocab_size=vocab_size,
+            embed_dim=embed_dim,
+            latent_dim=latent_dim,
+            n_layers=n_layers,
+            n_heads=n_heads,
+            mlp_ratio=mlp_ratio,
+        ),
+        training=TrainingConfig(
+            seq_length=seq_length,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            sigreg_weight=sigreg_weight,
+            max_steps=max_steps,
+            max_wallclock_seconds=max_seconds,
+        ),
+    )
+    
+    # Create model
+    device = torch.device("cuda")
+    model = LatentLM(config.model).to(device)
+    
+    n_params = model.count_parameters()
+    size_3bit = model.estimate_size(3)
+    
+    print(f"Model parameters: {n_params:,}")
+    print(f"Estimated 3-bit size: {size_3bit:.2f} MB")
+    
+    if size_3bit > 16:
+        print(f"⚠️  WARNING: Model too large for 16MB limit!")
+        return {
+            "status": "error",
+            "error": f"Model size {size_3bit:.2f}MB exceeds 16MB limit",
+            "params": n_params,
+            "size_3bit_mb": size_3bit,
+        }
+    
+    # Load data
+    print("\nLoading data...")
+    data_path = "/data/datasets/fineweb10B_sp1024"
+    train_files = sorted([f for f in os.listdir(data_path) if "train" in f])
+    
+    if not train_files:
+        return {"status": "error", "error": "No training files found"}
+    
+    # Load first shard
+    train_path = os.path.join(data_path, train_files[0])
+    train_data = np.memmap(train_path, dtype=np.uint16, mode='r')
+    print(f"Loaded {len(train_data):,} tokens from {train_files[0]}")
+    
+    # Optimizer
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=learning_rate,
+        betas=(0.9, 0.95),
+        weight_decay=0.01,
+    )
+    
+    # Training loop
+    print("\nStarting training...")
+    start_time = time.time()
+    
+    model.train()
+    losses = []
+    
+    for step in range(max_steps):
+        # Check time limit
+        elapsed = time.time() - start_time
+        if elapsed >= max_seconds:
+            print(f"\nTime limit reached ({elapsed:.1f}s)")
+            break
+        
+        # Sample random batch
+        batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
+        batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
+        batch = torch.from_numpy(batch.astype(np.int64)).to(device)
+        
+        # Forward + backward
+        optimizer.zero_grad()
+        loss_dict = model.compute_loss(batch, sigreg_weight=sigreg_weight)
+        loss_dict['loss'].backward()
+        
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        
+        optimizer.step()
+        
+        losses.append(loss_dict['ce_loss'].item())
+        
+        if step % 50 == 0:
+            avg_loss = np.mean(losses[-50:]) if losses else 0
+            bpb = avg_loss / math.log(2)
+            print(f"step {step:4d} | loss {avg_loss:.4f} | bpb {bpb:.4f} | time {elapsed:.1f}s")
+    
+    # Final evaluation
+    final_steps = step + 1
+    elapsed = time.time() - start_time
+    
+    # Calculate final BPB
+    model.eval()
+    val_losses = []
+    
+    with torch.no_grad():
+        for _ in range(10):
+            batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
+            batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
+            batch = torch.from_numpy(batch.astype(np.int64)).to(device)
+            
+            loss_dict = model.compute_loss(batch, sigreg_weight=0)
+            val_losses.append(loss_dict['ce_loss'].item())
+    
+    final_loss = np.mean(val_losses)
+    final_bpb = final_loss / math.log(2)
+    
+    print("\n" + "=" * 60)
+    print("RESULTS")
+    print("=" * 60)
+    print(f"Steps completed: {final_steps}")
+    print(f"Time elapsed: {elapsed:.1f}s")
+    print(f"Final loss: {final_loss:.4f}")
+    print(f"Final BPB: {final_bpb:.4f}")
+    print(f"Model size (3-bit): {size_3bit:.2f} MB")
+    
+    # Save results
+    result = {
+        "status": "ok",
+        "experiment_name": experiment_name,
+        "timestamp": datetime.now().isoformat(),
+        "config": {
+            "latent_dim": latent_dim,
+            "n_layers": n_layers,
+            "n_heads": n_heads,
+            "mlp_ratio": mlp_ratio,
+            "embed_dim": embed_dim,
+            "vocab_size": vocab_size,
+            "seq_length": seq_length,
+            "batch_size": batch_size,
+            "learning_rate": learning_rate,
+            "sigreg_weight": sigreg_weight,
+        },
+        "results": {
+            "params": n_params,
+            "size_3bit_mb": size_3bit,
+            "steps": final_steps,
+            "time_seconds": elapsed,
+            "final_loss": final_loss,
+            "final_bpb": final_bpb,
+        }
+    }
+    
+    # Save to volume
+    os.makedirs("/output/experiments", exist_ok=True)
+    result_path = f"/output/experiments/{experiment_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(result_path, 'w') as f:
+        json.dump(result, f, indent=2)
+    print(f"\nResults saved to {result_path}")
+    
+    output_volume.commit()
+    
+    return result
+
+
+@app.function(
+    image=image,
+    gpu="A100",
+    volumes={"/output": output_volume},
+    timeout=60,
+)
+def list_experiments():
+    """List all experiment results"""
+    exp_dir = "/output/experiments"
+    if not os.path.exists(exp_dir):
+        return {"experiments": []}
+    
+    results = []
+    for f in sorted(os.listdir(exp_dir)):
+        if f.endswith('.json'):
+            with open(os.path.join(exp_dir, f)) as fp:
+                data = json.load(fp)
+                results.append({
+                    "file": f,
+                    "name": data.get("experiment_name"),
+                    "bpb": data.get("results", {}).get("final_bpb"),
+                    "params": data.get("results", {}).get("params"),
+                })
+    
+    return {"experiments": results}
+
+
+@app.local_entrypoint()
+def main():
+    print("Parameter Golf Experiment Runner")
+    print("=" * 40)
+    print("Commands:")
+    print("  modal run experiment.py::run_experiment")
+    print("  modal run experiment.py::run_experiment --latent-dim 128 --n-layers 12")
+    print("  modal run experiment.py::list_experiments")
