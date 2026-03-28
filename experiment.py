@@ -82,13 +82,25 @@ def run_experiment(
     from configs.base import Config, ModelConfig, TrainingConfig
     from models.latent_lm import LatentLM
     from models.standard_gpt import StandardGPT
+    from models.mamba_lm import MambaLM, MambaConfig
     
     print(f"🚀 {experiment_name}: {model_type}, dim={embed_dim}, layers={n_layers}")
     
     # Create model based on type
     device = torch.device("cuda")
     
-    if model_type == "standard":
+    if model_type == "mamba":
+        mamba_config = MambaConfig(
+            vocab_size=vocab_size,
+            d_model=embed_dim,
+            n_layer=n_layers,
+            d_state=64,
+            expand=2,
+            headdim=32,
+            max_seq_len=seq_length,
+        )
+        model = MambaLM(mamba_config).to(device)
+    elif model_type == "standard":
         model = StandardGPT(
             vocab_size=vocab_size,
             dim=embed_dim,
@@ -232,6 +244,8 @@ def run_experiment(
             
         if model_type == "latent":
             loss_dict = model.compute_loss(batch, sigreg_weight=sigreg_weight)
+        elif model_type in ("standard", "mamba"):
+            loss_dict = model.compute_loss(batch)
         else:
             loss_dict = model.compute_loss(batch)
         loss_dict['loss'].backward()
@@ -285,6 +299,8 @@ def run_experiment(
             
             if model_type == "latent":
                 loss_dict = model.compute_loss(batch, sigreg_weight=0)
+            elif model_type in ("standard", "mamba"):
+                loss_dict = model.compute_loss(batch)
             else:
                 loss_dict = model.compute_loss(batch)
             val_losses.append(loss_dict['ce_loss'].item())
