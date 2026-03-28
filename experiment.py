@@ -47,9 +47,11 @@ def setup_code():
 )
 def run_experiment(
     # Model config
+    model_type: str = "latent",  # "latent" or "standard"
     latent_dim: int = 64,
     n_layers: int = 8,
     n_heads: int = 8,
+    n_kv_heads: int = 4,
     mlp_ratio: float = 4.0,
     embed_dim: int = 256,
     vocab_size: int = 1024,
@@ -73,35 +75,39 @@ def run_experiment(
     
     from configs.base import Config, ModelConfig, TrainingConfig
     from models.latent_lm import LatentLM
+    from models.standard_gpt import StandardGPT
     
     print("=" * 60)
     print(f"Experiment: {experiment_name}")
-    print(f"Config: latent_dim={latent_dim}, n_layers={n_layers}, lr={learning_rate}")
+    print(f"Model: {model_type}, dim={embed_dim}, layers={n_layers}, lr={learning_rate}")
     print("=" * 60)
     
-    # Build config
-    config = Config(
-        model=ModelConfig(
+    # Create model based on type
+    device = torch.device("cuda")
+    
+    if model_type == "standard":
+        model = StandardGPT(
             vocab_size=vocab_size,
-            embed_dim=embed_dim,
-            latent_dim=latent_dim,
+            dim=embed_dim,
             n_layers=n_layers,
             n_heads=n_heads,
-            mlp_ratio=mlp_ratio,
-        ),
-        training=TrainingConfig(
-            seq_length=seq_length,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            sigreg_weight=sigreg_weight,
-            max_steps=max_steps,
-            max_wallclock_seconds=max_seconds,
-        ),
-    )
-    
-    # Create model
-    device = torch.device("cuda")
-    model = LatentLM(config.model).to(device)
+            n_kv_heads=n_kv_heads,
+            mlp_mult=int(mlp_ratio),
+            max_seq_len=seq_length,
+            tie_embeddings=True,
+        ).to(device)
+    else:
+        config = Config(
+            model=ModelConfig(
+                vocab_size=vocab_size,
+                embed_dim=embed_dim,
+                latent_dim=latent_dim,
+                n_layers=n_layers,
+                n_heads=n_heads,
+                mlp_ratio=mlp_ratio,
+            ),
+        )
+        model = LatentLM(config.model).to(device)
     
     n_params = model.count_parameters()
     size_3bit = model.estimate_size(3)
@@ -160,7 +166,10 @@ def run_experiment(
         
         # Forward + backward
         optimizer.zero_grad()
-        loss_dict = model.compute_loss(batch, sigreg_weight=sigreg_weight)
+        if model_type == "latent":
+            loss_dict = model.compute_loss(batch, sigreg_weight=sigreg_weight)
+        else:
+            loss_dict = model.compute_loss(batch)
         loss_dict['loss'].backward()
         
         # Gradient clipping
@@ -189,7 +198,10 @@ def run_experiment(
             batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
             batch = torch.from_numpy(batch.astype(np.int64)).to(device)
             
-            loss_dict = model.compute_loss(batch, sigreg_weight=0)
+            if model_type == "latent":
+                loss_dict = model.compute_loss(batch, sigreg_weight=0)
+            else:
+                loss_dict = model.compute_loss(batch)
             val_losses.append(loss_dict['ce_loss'].item())
     
     final_loss = np.mean(val_losses)
