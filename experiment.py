@@ -194,6 +194,12 @@ def run_experiment(
     # Training loop
     print(f"🏃 Training for {max_seconds/60:.0f}min...")
     start_time = time.time()
+    last_progress_time = 0  # Track last progress log time
+    progress_interval = 900  # Log every 15 minutes (to file, not stdout)
+    
+    # Progress file (local, not printed to LLM)
+    progress_file = f"/output/progress/{experiment_name}.log"
+    os.makedirs("/output/progress", exist_ok=True)
     
     model.train()
     losses = []
@@ -241,8 +247,17 @@ def run_experiment(
         
         losses.append(loss_dict['ce_loss'].item())
         
-        # Only log every 500 steps to reduce output (was 50)
-        if step % 500 == 0:
+        # Progress to file every 15 minutes (not printed, saves tokens)
+        if elapsed - last_progress_time >= progress_interval:
+            avg_loss = np.mean(losses[-50:]) if losses else 0
+            bpb = avg_loss / math.log(2)
+            total_mins = (total_time_before + elapsed) / 60
+            with open(progress_file, "a") as f:
+                f.write(f"[{total_mins:.0f}min] step {step}, BPB {bpb:.2f}\n")
+            last_progress_time = elapsed
+        
+        # Only print every 500 steps (minimal stdout)
+        if step % 500 == 0 and step > start_step:
             avg_loss = np.mean(losses[-50:]) if losses else 0
             bpb = avg_loss / math.log(2)
             mins = elapsed / 60
