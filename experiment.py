@@ -60,7 +60,7 @@ def run_experiment(
     batch_size: int = 32,
     learning_rate: float = 1e-3,
     sigreg_weight: float = 0.1,
-    max_steps: int = 500,
+    max_steps: int = 1000000,
     max_seconds: int = 120,
     # Optimizer
     optimizer_type: str = "adamw",  # "adamw" or "muon"
@@ -289,7 +289,7 @@ def run_experiment(
                 loss_dict = model.compute_loss(batch)
             val_losses.append(loss_dict['ce_loss'].item())
     
-    final_loss = np.mean(val_losses)
+    final_loss = float(np.mean(val_losses))
     final_bpb = final_loss / math.log(2)
     
     # Compact summary (reduces token usage in chat)
