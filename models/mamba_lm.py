@@ -77,90 +77,64 @@ def apply_rope(x: Tensor, angles: Tensor) -> Tensor:
     return torch.stack([x_rot_even, x_rot_odd], dim=-1).flatten(-2)
 
 
-def segsum(x: Tensor) -> Tensor:
-    """Compute segment sum for SSD."""
-    T = x.size(-1)
-    x = x[..., :, None].repeat(1, 1, 1, T)
-    mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=-1)
-    x = x.masked_fill(~mask, 0)
-    return x.cumsum(dim=-2)
+def simple_ssm_scan(x: Tensor, A: Tensor, B: Tensor, C: Tensor) -> Tensor:
+    """Simple sequential SSM scan (no chunking, pure PyTorch).
+    
+    For debugging and correctness. Slower but simpler.
+    
+    Args:
+        x: (batch, seqlen, nheads, headdim)
+        A: (batch, seqlen, nheads) - log decay rates (negative)
+        B: (batch, seqlen, nheads, d_state)
+        C: (batch, seqlen, nheads, d_state)
+    
+    Returns:
+        y: (batch, seqlen, nheads, headdim)
+    """
+    batch, seqlen, nheads, headdim = x.shape
+    d_state = B.shape[-1]
+    device = x.device
+    dtype = x.dtype
+    
+    # Initialize state
+    h = torch.zeros(batch, nheads, headdim, d_state, device=device, dtype=dtype)
+    
+    outputs = []
+    for t in range(seqlen):
+        # Get current inputs
+        x_t = x[:, t]  # (batch, nheads, headdim)
+        A_t = A[:, t]  # (batch, nheads)
+        B_t = B[:, t]  # (batch, nheads, d_state)
+        C_t = C[:, t]  # (batch, nheads, d_state)
+        
+        # State update: h = exp(A) * h + B * x
+        decay = torch.exp(A_t).unsqueeze(-1).unsqueeze(-1)  # (batch, nheads, 1, 1)
+        Bx = torch.einsum("bhn, bhp -> bhpn", B_t, x_t)  # (batch, nheads, headdim, d_state)
+        h = h * decay + Bx
+        
+        # Output: y = C @ h
+        y_t = torch.einsum("bhpn, bhn -> bhp", h, C_t)  # (batch, nheads, headdim)
+        outputs.append(y_t)
+    
+    y = torch.stack(outputs, dim=1)  # (batch, seqlen, nheads, headdim)
+    return y
 
 
 def ssd(x: Tensor, A: Tensor, B: Tensor, C: Tensor, chunk_size: int, 
         initial_states: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
     """Structured State Space Duality (SSD) algorithm.
     
-    This is the core Mamba operation - parallel scan over chunks.
+    Uses simple sequential scan for now (can optimize later with chunking).
     """
     batch, seqlen, nheads, headdim = x.shape
-    d_state = B.shape[-1]
     
-    # Pad sequence to chunk_size multiple if needed
-    pad_len = (chunk_size - seqlen % chunk_size) % chunk_size
-    if pad_len > 0:
-        x = F.pad(x, (0, 0, 0, 0, 0, pad_len))
-        A = F.pad(A, (0, pad_len))
-        B = F.pad(B, (0, 0, 0, 0, 0, pad_len))
-        C = F.pad(C, (0, 0, 0, 0, 0, pad_len))
+    y = simple_ssm_scan(x, A, B, C)
+    y = y.reshape(batch, seqlen, nheads * headdim)
     
-    new_seqlen = x.shape[1]
-    num_chunks = new_seqlen // chunk_size
+    # Return dummy final state for now
+    final_state = torch.zeros(batch, nheads, headdim, B.shape[-1], device=x.device)
     
-    # Rearrange into chunks
-    x_c = x.view(batch, num_chunks, chunk_size, nheads, headdim)
-    A_c = A.view(batch, num_chunks, chunk_size, nheads).permute(0, 1, 3, 2)  # (b, c, h, l)
-    B_c = B.view(batch, num_chunks, chunk_size, nheads, d_state)
-    C_c = C.view(batch, num_chunks, chunk_size, nheads, d_state)
-    
-    # Transpose for einsum convenience
-    x_c = x_c.permute(0, 1, 3, 2, 4)  # (batch, chunks, nheads, chunk_size, headdim)
-    B_c = B_c.permute(0, 1, 3, 2, 4)  # (batch, chunks, nheads, chunk_size, d_state)
-    C_c = C_c.permute(0, 1, 3, 2, 4)
-    # A_c is already (batch, chunks, nheads, chunk_size)
-    
-    A_cumsum = torch.cumsum(A_c, dim=-1)
-    
-    # Intra-chunk computation
-    L = torch.exp(segsum(A_c.permute(0, 2, 1, 3)).permute(0, 2, 1, 3, 4))  # decay matrix
-    
-    # Y_diag = C @ L @ (B^T @ x)
-    Bx = torch.einsum("bchln, bchlp -> bchpn", B_c, x_c)  # (batch, chunks, heads, headdim, d_state)
-    Y_diag = torch.einsum("bchln, bchls, bchpn -> bchlp", C_c, L, Bx)
-    
-    # Inter-chunk states
-    decay_states = torch.exp(A_cumsum[..., -1:] - A_cumsum)
-    states = torch.einsum("bchln, bchl, bchlp -> bchpn", B_c, decay_states, x_c)
-    
-    # State recurrence across chunks
-    num_chunks = states.shape[1]
-    if initial_states is None:
-        initial_states = torch.zeros_like(states[:, :1])
-    states = torch.cat([initial_states, states], dim=1)
-    
-    # Simple sequential scan for cross-chunk (pure PyTorch)
-    decay_chunk = torch.exp(A_cumsum[..., -1])  # (batch, chunks, heads)
-    final_states = []
-    h = initial_states[:, 0]
-    for c in range(num_chunks):
-        h = h * decay_chunk[:, c:c+1].unsqueeze(-1) + states[:, c+1]
-        final_states.append(h)
-    final_states = torch.stack(final_states, dim=1)
-    final_state = final_states[:, -1]
-    
-    # State to output
-    state_decay_out = torch.exp(A_cumsum)
-    Y_off = torch.einsum("bchln, bchpn, bchl -> bchlp", C_c, final_states, state_decay_out)
-    
-    # Combine
-    Y = Y_diag + Y_off
-    Y = Y.permute(0, 1, 3, 2, 4)  # (batch, chunks, chunk_size, heads, headdim)
-    Y = Y.reshape(batch, -1, nheads * headdim)
-    
-    # Remove padding
-    if pad_len > 0:
-        Y = Y[:, :seqlen]
-    
-    return Y, final_state
+    return y, final_state
 
 
 class Mamba3Block(nn.Module):
