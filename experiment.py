@@ -62,6 +62,9 @@ def run_experiment(
     sigreg_weight: float = 0.1,
     max_steps: int = 500,
     max_seconds: int = 120,
+    # Optimizer
+    optimizer_type: str = "adamw",  # "adamw" or "muon"
+    muon_momentum: float = 0.95,
     # Experiment
     experiment_name: str = "default",
 ):
@@ -152,12 +155,26 @@ def run_experiment(
     print(f"Total training tokens: {total_tokens:,}")
     
     # Optimizer
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=learning_rate,
-        betas=(0.9, 0.95),
-        weight_decay=0.01,
-    )
+    if optimizer_type == "muon":
+        from optimizers.muon import Muon, MuonWithAdamW
+        print(f"Using Muon optimizer (momentum={muon_momentum})")
+        optimizer = MuonWithAdamW(
+            model.parameters(),
+            lr=learning_rate,
+            momentum=muon_momentum,
+            nesterov=True,
+            ns_steps=5,
+            adamw_lr=learning_rate * 0.1,  # Lower LR for 1D params
+            weight_decay=0.01,
+        )
+    else:
+        print(f"Using AdamW optimizer")
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=learning_rate,
+            betas=(0.9, 0.95),
+            weight_decay=0.01,
+        )
     
     # Training loop
     print("\nStarting training...")
