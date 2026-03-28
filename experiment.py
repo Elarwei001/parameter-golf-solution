@@ -132,10 +132,24 @@ def run_experiment(
     if not train_files:
         return {"status": "error", "error": "No training files found"}
     
-    # Load first shard
-    train_path = os.path.join(data_path, train_files[0])
-    train_data = np.memmap(train_path, dtype=np.uint16, mode='r')
-    print(f"Loaded {len(train_data):,} tokens from {train_files[0]}")
+    # Load ALL training shards
+    all_data = []
+    total_tokens = 0
+    for f in train_files:
+        train_path = os.path.join(data_path, f)
+        shard_data = np.memmap(train_path, dtype=np.uint16, mode='r')
+        all_data.append(shard_data)
+        total_tokens += len(shard_data)
+        print(f"  Loaded {f}: {len(shard_data):,} tokens")
+    
+    # Concatenate (use first shard for simplicity if memory constrained)
+    if len(all_data) == 1:
+        train_data = all_data[0]
+    else:
+        # Randomly sample from shards during training
+        train_data = all_data  # Keep as list
+    
+    print(f"Total training tokens: {total_tokens:,}")
     
     # Optimizer
     optimizer = torch.optim.AdamW(
@@ -160,8 +174,15 @@ def run_experiment(
             break
         
         # Sample random batch
-        batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
-        batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
+        if isinstance(train_data, list):
+            # Multiple shards - sample from random shard
+            shard_idx = np.random.randint(0, len(train_data))
+            shard = train_data[shard_idx]
+            batch_starts = np.random.randint(0, len(shard) - seq_length - 1, batch_size)
+            batch = np.stack([shard[i:i+seq_length+1] for i in batch_starts])
+        else:
+            batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
+            batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
         batch = torch.from_numpy(batch.astype(np.int64)).to(device)
         
         # Forward + backward
@@ -194,8 +215,14 @@ def run_experiment(
     
     with torch.no_grad():
         for _ in range(10):
-            batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
-            batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
+            if isinstance(train_data, list):
+                shard_idx = np.random.randint(0, len(train_data))
+                shard = train_data[shard_idx]
+                batch_starts = np.random.randint(0, len(shard) - seq_length - 1, batch_size)
+                batch = np.stack([shard[i:i+seq_length+1] for i in batch_starts])
+            else:
+                batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
+                batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
             batch = torch.from_numpy(batch.astype(np.int64)).to(device)
             
             if model_type == "latent":
