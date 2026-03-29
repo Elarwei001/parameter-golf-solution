@@ -71,6 +71,10 @@ def run_experiment(
     # Checkpoint
     resume_from: str = "",  # checkpoint name to resume from
     save_checkpoint: bool = True,  # save checkpoint at end
+    # Eval
+    sliding_window_eval: bool = True,   # use sliding window evaluation
+    eval_stride: int = 64,              # sliding window stride
+    eval_batch_seqs: int = 128,         # windows per forward pass
     # Experiment
     experiment_name: str = "default",
 ):
@@ -179,6 +183,16 @@ def run_experiment(
         train_data = all_data  # Keep as list
     
     print(f"📚 {total_tokens/1e6:.0f}M tokens loaded")
+    
+    # Load validation data for sliding window eval
+    val_files = sorted([f for f in os.listdir(data_path) if "val" in f])
+    if val_files:
+        val_path = os.path.join(data_path, val_files[0])
+        val_data = np.memmap(val_path, dtype=np.uint16, mode='r')
+        print(f"📖 Val: {len(val_data)/1e6:.1f}M tokens")
+    else:
+        val_data = None
+        print(f"⚠️  No val file found, will use train data for eval")
     
     # Optimizer (silent setup)
     if optimizer_type == "muon":
@@ -300,35 +314,77 @@ def run_experiment(
     
     # Calculate final BPB
     model.eval()
-    val_losses = []
     
-    with torch.no_grad():
-        for _ in range(10):
-            if isinstance(train_data, list):
-                shard_idx = np.random.randint(0, len(train_data))
-                shard = train_data[shard_idx]
-                batch_starts = np.random.randint(0, len(shard) - seq_length - 1, batch_size)
-                batch = np.stack([shard[i:i+seq_length+1] for i in batch_starts])
-            else:
-                batch_starts = np.random.randint(0, len(train_data) - seq_length - 1, batch_size)
-                batch = np.stack([train_data[i:i+seq_length+1] for i in batch_starts])
-            batch = torch.from_numpy(batch.astype(np.int64)).to(device)
-            
-            if model_type == "latent":
-                loss_dict = model.compute_loss(batch, sigreg_weight=0)
-            elif model_type in ("standard", "mamba", "shared"):
-                loss_dict = model.compute_loss(batch)
-            else:
-                loss_dict = model.compute_loss(batch)
-            val_losses.append(loss_dict['ce_loss'].item())
+    # Choose eval data source
+    eval_data_src = val_data if val_data is not None else (train_data if not isinstance(train_data, list) else train_data[0])
     
-    final_loss = float(np.mean(val_losses))
-    final_bpb = final_loss / math.log(2)
+    if sliding_window_eval and val_data is not None:
+        # Sliding window evaluation (scores every token exactly once with maximum context)
+        print(f"📏 Sliding window eval (stride={eval_stride}, batch_seqs={eval_batch_seqs})...")
+        total_tokens = len(eval_data_src) - 1
+        window_starts = list(range(0, total_tokens, eval_stride))
+        
+        loss_sum = 0.0
+        token_count = 0
+        
+        with torch.no_grad():
+            for bi in range(0, len(window_starts), eval_batch_seqs):
+                batch_ws = window_starts[bi:bi + eval_batch_seqs]
+                bsz = len(batch_ws)
+                
+                x_batch = torch.zeros(bsz, seq_length, dtype=torch.int64, device=device)
+                y_batch = torch.zeros(bsz, seq_length, dtype=torch.int64, device=device)
+                wlens = []
+                
+                for i, ws in enumerate(batch_ws):
+                    end = min(ws + seq_length, total_tokens)
+                    wlen = end - ws
+                    wlens.append(wlen)
+                    chunk = torch.from_numpy(eval_data_src[ws:end + 1].astype(np.int64))
+                    x_batch[i, :wlen] = chunk[:-1]
+                    y_batch[i, :wlen] = chunk[1:]
+                
+                logits = model(x_batch)
+                
+                nll = F.cross_entropy(
+                    logits.reshape(-1, logits.size(-1)),
+                    y_batch.reshape(-1),
+                    reduction="none",
+                ).reshape(bsz, seq_length)
+                
+                for i, ws in enumerate(batch_ws):
+                    wlen = wlens[i]
+                    s = 0 if ws == 0 else max(wlen - eval_stride, 0)
+                    scored_nll = nll[i, s:wlen]
+                    loss_sum += scored_nll.sum().item()
+                    token_count += (wlen - s)
+        
+        final_loss = loss_sum / token_count if token_count > 0 else float('nan')
+        final_bpb = final_loss / math.log(2)
+        eval_mode = f"sliding(stride={eval_stride})"
+    else:
+        # Standard evaluation: random batches from val/train
+        val_losses = []
+        with torch.no_grad():
+            for _ in range(10):
+                batch_starts = np.random.randint(0, len(eval_data_src) - seq_length - 1, batch_size)
+                batch = np.stack([eval_data_src[i:i+seq_length+1] for i in batch_starts])
+                batch = torch.from_numpy(batch.astype(np.int64)).to(device)
+                
+                if model_type == "latent":
+                    loss_dict = model.compute_loss(batch, sigreg_weight=0)
+                else:
+                    loss_dict = model.compute_loss(batch)
+                val_losses.append(loss_dict['ce_loss'].item())
+        
+        final_loss = float(np.mean(val_losses))
+        final_bpb = final_loss / math.log(2)
+        eval_mode = "standard"
     
     # Compact summary (reduces token usage in chat)
     mins = elapsed / 60
     total_mins = total_time_before / 60 + mins
-    print(f"\n✅ {experiment_name}: {final_steps} steps, {mins:.0f}min (total {total_mins:.0f}min), BPB {final_bpb:.2f}, size {size_3bit:.1f}MB")
+    print(f"\n✅ {experiment_name}: {final_steps} steps, {mins:.0f}min (total {total_mins:.0f}min), BPB {final_bpb:.2f} [{eval_mode}], size {size_3bit:.1f}MB")
     
     # Save checkpoint for resuming
     total_time = total_time_before + elapsed
@@ -387,6 +443,7 @@ def run_experiment(
             "total_time_seconds": total_time,
             "final_loss": final_loss,
             "final_bpb": final_bpb,
+            "eval_mode": eval_mode,
         }
     }
     
