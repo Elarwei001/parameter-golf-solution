@@ -166,12 +166,14 @@ def run_experiment(
     if not train_files:
         return {"status": "error", "error": "No training files found"}
     
-    # Load ALL training shards
+    # Load ALL training shards (skip 512-uint16 header in each shard)
+    HEADER_TOKENS = 512  # 256 int32 header = 512 uint16 positions
     all_data = []
     total_tokens = 0
     for f in train_files:
         train_path = os.path.join(data_path, f)
-        shard_data = np.memmap(train_path, dtype=np.uint16, mode='r')
+        shard_raw = np.memmap(train_path, dtype=np.uint16, mode='r')
+        shard_data = shard_raw[HEADER_TOKENS:]  # skip header
         all_data.append(shard_data)
         total_tokens += len(shard_data)
     
@@ -188,8 +190,9 @@ def run_experiment(
     val_files = sorted([f for f in os.listdir(data_path) if "val" in f])
     if val_files:
         val_path = os.path.join(data_path, val_files[0])
-        val_data = np.memmap(val_path, dtype=np.uint16, mode='r')
-        print(f"📖 Val: {len(val_data)/1e6:.1f}M tokens")
+        val_raw = np.memmap(val_path, dtype=np.uint16, mode='r')
+        val_data = val_raw[HEADER_TOKENS:]  # skip header
+        print(f"📖 Val: {len(val_data)/1e6:.1f}M tokens (skipped {HEADER_TOKENS} header tokens)")
     else:
         val_data = None
         print(f"⚠️  No val file found, will use train data for eval")
