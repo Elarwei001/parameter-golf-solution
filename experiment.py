@@ -191,7 +191,7 @@ def run_experiment(
     if val_files:
         val_path = os.path.join(data_path, val_files[0])
         val_raw = np.memmap(val_path, dtype=np.uint16, mode='r')
-        val_data = val_raw[HEADER_TOKENS:]  # skip header
+        val_data = val_raw[HEADER_TOKENS:HEADER_TOKENS + 10_000_000]  # first 10M tokens, skip header
         print(f"📖 Val: {len(val_data)/1e6:.1f}M tokens (skipped {HEADER_TOKENS} header tokens)")
     else:
         val_data = None
