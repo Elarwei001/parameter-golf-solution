@@ -10,6 +10,14 @@ Full Attention lets every token see all other tokens, with O(n²) complexity. Va
 
 ---
 
+## Attention Mask Comparison
+
+![Attention Masks](images/attention-masks.png)
+
+*Left: Full Causal Attention (lower-triangular). Center: Sliding Window (each token sees only the last k tokens). Right: Sliding Window + Global tokens (first 2 tokens attend everywhere).*
+
+---
+
 ## Full Attention (Standard)
 
 ```
@@ -71,6 +79,14 @@ Each token only looks at the k nearest neighbors (local window)
 ```python
 window_size = 256  # each token looks at 256 nearest neighbors
 ```
+
+---
+
+## Complexity Comparison
+
+![Attention Complexity](images/attention-complexity.png)
+
+*Full Attention scales quadratically with sequence length; Sliding Window is linear. At 2048 tokens, full attention requires ~4M ops vs only ~128K for sliding window (window=64).*
 
 ---
 

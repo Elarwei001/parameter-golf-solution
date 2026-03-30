@@ -10,6 +10,14 @@ It's a neural network architecture that excels at processing sequential data (te
 
 ---
 
+## Architecture Overview
+
+![Transformer Block Architecture](images/transformer-block.png)
+
+*Transformer Block: Input Embedding → Positional Encoding → Multi-Head Self-Attention (+ residual) → FFN (+ residual) → Output. The block repeats ×N layers.*
+
+---
+
 ## Core Components
 
 ### 1. Self-Attention
@@ -37,6 +45,12 @@ $$
 - **V (Value)**: What is my content?
 - **softmax**: Converts scores into probabilities (sum = 1)
 - **√d**: Scaling factor to prevent values from getting too large
+
+**Self-Attention Weight Matrix:**
+
+![Self-Attention Heatmap](images/self-attention-heatmap.png)
+
+*Attention weights for a sample sentence. Brighter = stronger attention. Notice "it" attending back to "fox" (token co-reference).*
 
 ### 2. FFN (Feed-Forward Network)
 

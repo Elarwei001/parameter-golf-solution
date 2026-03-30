@@ -73,9 +73,64 @@ weight = weight - learning_rate * weight_decay * weight
 
 **Paper claims**: Converges 2x faster than Adam.
 
-**Core idea**: Replaces SGD with Newton's method for a more accurate estimate of update direction.
+### The Intuition: Why Newton's Method?
 
-**Our experiments**:
+Imagine you're hiking down a mountain (minimizing loss) in dense fog:
+
+| Method | Strategy | Problem |
+|--------|----------|---------|
+| **SGD** | Walk downhill based on slope under your feet | Might zigzag, slow |
+| **Adam** | Walk downhill + remember recent directions | Better, but still local |
+| **Newton** | Use curvature to predict where the bottom is | Directly aim for minimum! |
+
+**Newton's method** uses second-order information (curvature/Hessian) to make smarter steps:
+
+$$
+w_{new} = w_{old} - H^{-1} \nabla L
+$$
+
+Where **H** is the Hessian matrix (second derivatives). The problem? Computing H⁻¹ is **O(n³)** — impossible for millions of parameters.
+
+### Muon's Trick: Approximate the Hessian Cheaply
+
+Muon approximates the Hessian inverse using **momentum orthogonalization**:
+
+```python
+# Simplified Muon idea
+def muon_step(grad, prev_grad, prev_update):
+    # Orthogonalize current gradient against previous update
+    # This approximates Newton direction without computing Hessian
+    
+    # 1. Project out the component parallel to previous update
+    proj = dot(grad, prev_update) / dot(prev_update, prev_update)
+    grad_orth = grad - proj * prev_update
+    
+    # 2. Use this "cleaned" gradient
+    return -lr * grad_orth
+```
+
+**Why it works**:
+- Removes redundant gradient directions
+- Implicitly captures curvature information
+- Much cheaper than full Newton: **O(n)** instead of O(n³)
+
+### Why "Muon"?
+
+**Mu**-**O**rthogonalized **N**ewton — the name reflects the orthogonalization trick.
+
+### The Trade-off
+
+| Aspect | Adam | Muon |
+|--------|------|------|
+| **Per-step cost** | O(n) | O(n) — similar |
+| **Memory** | 2× params (m, v) | 2× params (similar) |
+| **Early training** | Slower | **Faster** ✓ |
+| **Late training** | **More stable** ✓ | Can overshoot |
+| **Hyperparameter sensitivity** | Robust | More sensitive |
+
+### Our Experiment Deep Dive
+
+**Our experiments (what actually happened)**:
 
 | Time | AdamW | Muon |
 |------|-------|------|
@@ -83,10 +138,24 @@ weight = weight - learning_rate * weight_decay * weight
 | 30min | **3.73** | 3.91 |
 | 60min | **3.55** 🏆 | 3.85 |
 
+**Analysis**:
+- **15 min**: Muon's Newton-approximation gives it a head start
+- **30+ min**: AdamW's conservative updates avoid overshooting
+- **Why the reversal?** Muon's aggressive steps may overshoot near the minimum
+
 **Conclusion**:
-- Muon starts fast
-- But AdamW is more stable long-term
-- **Don't blindly trust papers** — always run your own experiments!
+- Muon is great for **short training runs** or **quick prototyping**
+- AdamW is better for **long training** or **final models**
+- **Don't blindly trust papers** — always validate on YOUR setup!
+
+### When to Use Muon?
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Quick experiment (<30 min) | Try Muon |
+| Final training run | Stick with AdamW |
+| Hyperparameter search | Muon (faster iterations) |
+| Production model | AdamW (more predictable) |
 
 ---
 
