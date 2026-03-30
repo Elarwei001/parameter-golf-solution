@@ -89,6 +89,10 @@ torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 | Aggressive training | 0.5 |
 | Unsure | Start with 1.0 |
 
+![Gradient Clipping Effect](images/gradient-clipping.png)
+
+*Top: Raw gradient norms vs clipped norms. Spike gradients (common early in training) are capped at 1.0. Bottom: The resulting loss stability — without clipping, spikes cause loss to jump upward.*
+
 ---
 
 ## Checkpointing and Resuming Training
@@ -218,6 +222,14 @@ for batch in dataloader:
     scaler.step(optimizer)
     scaler.update()
 ```
+
+---
+
+## Our BPB Progress
+
+![BPB Progress Curve](images/bpb-progress.png)
+
+*Our training journey: starting at 3.47 BPB (vanilla GPT-2 config) and reaching 2.28 BPB through incremental improvements. Each bar represents a distinct experimental change.*
 
 ---
 

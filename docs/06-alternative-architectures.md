@@ -58,6 +58,10 @@ Baseline (Transformer): 2.49 BPB
 Mamba:                  5.42 BPB ← Much worse!
 ```
 
+![Transformer vs Mamba](images/transformer-vs-mamba.png)
+
+*Left: Compute complexity — Transformer O(n²) vs Mamba O(n). The crossover happens around n≈200 tokens; our sequences were only 128 tokens. Right: Our actual BPB results — Mamba failed badly at this scale.*
+
 **Why did it fail?**
 
 1. **Sequences too short** (128 tokens): Mamba's advantage is in long sequences

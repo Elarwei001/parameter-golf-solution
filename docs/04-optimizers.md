@@ -138,6 +138,10 @@ def muon_step(grad, prev_grad, prev_update):
 | 30min | **3.73** | 3.91 |
 | 60min | **3.55** 🏆 | 3.85 |
 
+![Adam vs Muon Convergence](images/optimizer-convergence.png)
+
+*Left: Training loss curves for Adam vs Muon. Right: Final BPB comparison across optimizer setups.*
+
 **Analysis**:
 - **15 min**: Muon's Newton-approximation gives it a head start
 - **30+ min**: AdamW's conservative updates avoid overshooting
@@ -162,6 +166,10 @@ def muon_step(grad, prev_grad, prev_update):
 ## Learning Rate Scheduling
 
 Choosing an optimizer isn't enough — how the learning rate changes over time matters too.
+
+![Learning Rate Schedule](images/lr-schedule.png)
+
+*Warmup (100 steps, linear) then cosine decay to 10% of peak LR. Our config: peak LR = 6e-4, total 2000 steps.*
 
 ### Warmup
 

@@ -67,6 +67,14 @@ Quantized: [0, 64, 128, 192, 255]
 | INT4 | 4 | 0.125x | Moderate |
 | **3-bit** | 3 | 0.09x | **Needs tricks** |
 
+![Quantization Precision Comparison](images/quantization-precision.png)
+
+*Weight value distribution at different precisions. FP32 is smooth and continuous; INT8 has 256 discrete levels; 3-bit has only 8 levels — information loss is clearly visible.*
+
+![Parameter Count vs Model Size](images/param-count-vs-size.png)
+
+*Model storage size vs parameter count for different dtypes (log scale). 3-bit quantization allows roughly 10× more parameters within the same size budget.*
+
 ---
 
 ## Post-Training Quantization (PTQ)
