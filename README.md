@@ -52,7 +52,7 @@ StandardGPT
 
 ### 🔬 Next to Try
 
-- [ ] LeakyReLU² + Sliding Window combo
+- [x] ~~LeakyReLU² + Sliding Window combo~~ → **In progress** (subagent running)
 - [ ] QAT (Quantization-Aware Training)
 - [ ] TTT (Test-Time Training)
 - [ ] Muon optimizer revisit with tuned hyperparams

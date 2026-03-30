@@ -19,5 +19,12 @@
     "train_bpb": 1.465077581099817,
     "val_bpb": 2.3568084470406374,
     "params": 4391168
+  },
+  {
+    "name": "leaky_relu2+sliding_window",
+    "steps": 1776,
+    "train_bpb": 1.5388530037779202,
+    "val_bpb": 2.2820588449750736,
+    "params": 4394240
   }
 ]

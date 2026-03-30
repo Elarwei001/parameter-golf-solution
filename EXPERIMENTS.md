@@ -114,7 +114,7 @@
 
 | Technique | Why Promising | Status |
 |-----------|---------------|--------|
-| **LeakyReLU² + Sliding Window** | Combine two winners | Next up |
+| **LeakyReLU² + Sliding Window** | Combine two winners | 🔄 **In progress** |
 | **QAT (Quantization-Aware Training)** | Top teams use it | Research needed |
 | **TTT (Test-Time Training)** | Leaderboard top uses it | Complex to implement |
 | **Muon + tuned hyperparams** | Maybe our config was wrong | Low priority |
