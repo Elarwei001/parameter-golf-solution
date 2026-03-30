@@ -105,6 +105,42 @@ model_config = {
 
 ---
 
+## Positional Encoding: RoPE
+
+Transformers have no inherent notion of position — they treat the sequence as a "bag of tokens". **Positional encoding** adds position information.
+
+### RoPE (Rotary Position Embedding)
+
+The modern approach used by LLaMA, GPT-NeoX, etc. Key idea: encode position by rotating the query/key vectors.
+
+**Our Bug Fix**: The original implementation pre-allocated a fixed-size cos/sin table. When sequence length exceeded this, it crashed:
+
+```
+RuntimeError: index out of bounds
+```
+
+**Solution**: We wrote `RotaryEmbeddingDynamic` that auto-expands:
+
+```python
+class RotaryEmbeddingDynamic(nn.Module):
+    def __init__(self, dim, max_seq_len=1024):
+        super().__init__()
+        self.dim = dim
+        self.max_seq_len = max_seq_len
+        self._build_cache(max_seq_len)
+    
+    def forward(self, x, seq_len):
+        if seq_len > self.max_seq_len:
+            # Auto-expand!
+            self.max_seq_len = seq_len * 2
+            self._build_cache(self.max_seq_len)
+        return self._apply_rotary(x, seq_len)
+```
+
+This fixed the Sliding Window evaluation bug.
+
+---
+
 ## Further Reading
 
 1. [Attention Is All You Need](https://arxiv.org/abs/1706.03762) — the original paper

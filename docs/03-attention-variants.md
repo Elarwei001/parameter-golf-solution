@@ -90,40 +90,6 @@ window_size = 256  # each token looks at 256 nearest neighbors
 
 ---
 
-## Implementation Details: The RoPE Bug
-
-A bug we encountered:
-
-```
-RuntimeError: index out of bounds
-```
-
-**Cause**: RoPE positional encoding pre-allocated a fixed-size cos/sin table, and exceeding the sequence length caused an out-of-bounds error.
-
-**Fix**: We wrote `RotaryEmbeddingDynamic`, which automatically expands the table size.
-
-```python
-class RotaryEmbeddingDynamic(nn.Module):
-    def __init__(self, dim, max_seq_len=1024):
-        super().__init__()
-        self.dim = dim
-        self.max_seq_len = max_seq_len
-        self._build_cache(max_seq_len)
-    
-    def _build_cache(self, seq_len):
-        # Build cos/sin cache
-        ...
-    
-    def forward(self, x, seq_len):
-        if seq_len > self.max_seq_len:
-            # Auto-expand!
-            self.max_seq_len = seq_len * 2
-            self._build_cache(self.max_seq_len)
-        return self._apply_rotary(x, seq_len)
-```
-
----
-
 ## Other Variants (Not Tried)
 
 | Variant | Idea | Use Case |
