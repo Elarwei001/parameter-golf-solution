@@ -1,67 +1,67 @@
-# 训练技巧
+# Training Techniques
 
-> 同样的模型和数据，训练技巧能让结果差几个点。这些是我们踩坑后的经验。
+> With the same model and data, training techniques can make a difference of several points. These are the lessons we learned the hard way.
 
-## 一句话定义
+## One-Line Definition
 
-**训练技巧 = 让模型更好地学习的工程细节**
+**Training Techniques = Engineering details that help the model learn better**
 
-架构决定上限，训练技巧决定能否接近上限。
+Architecture sets the ceiling; training techniques determine how close you get to it.
 
 ---
 
-## Learning Rate 调参
+## Learning Rate Tuning
 
-### 太大 vs 太小
+### Too Large vs Too Small
 
 ```
-lr 太大:
-Loss ─╱╲──╱╲──╱╲─→ 震荡不收敛
+lr too large:
+Loss ─╱╲──╱╲──╱╲─→ oscillates, fails to converge
 
-lr 太小:
-Loss ────────────→ 收敛太慢
+lr too small:
+Loss ────────────→ converges too slowly
 
-lr 合适:
+lr just right:
 Loss ─╲
        ╲
-        ╲────→ 平稳下降
+        ╲────→ smooth descent
 ```
 
-### 我们的发现
+### Our Findings
 
-| lr | 效果 |
-|-----|------|
-| 1e-3 | 开始震荡 |
-| **6e-4** | 最佳 🏆 |
-| 3e-4 | 收敛慢 |
-| 1e-4 | 太慢 |
+| lr | Result |
+|----|--------|
+| 1e-3 | Starts oscillating |
+| **6e-4** | Best 🏆 |
+| 3e-4 | Converges slowly |
+| 1e-4 | Too slow |
 
-**建议**：从 3e-4 开始，每次乘/除 2 来调。
+**Recommendation**: Start at 3e-4, then multiply/divide by 2 to tune.
 
 ---
 
 ## Warmup
 
-### 为什么需要
+### Why It's Needed
 
-训练开始时：
-- 权重随机初始化
-- 梯度方向不稳定
-- 大学习率容易"走偏"
+At the start of training:
+- Weights are randomly initialized
+- Gradient directions are unstable
+- A large learning rate can easily "go off track"
 
-### 实现
+### Implementation
 
 ```python
 def get_lr(step, warmup_steps, max_lr):
     if step < warmup_steps:
-        # 线性 warmup
+        # Linear warmup
         return max_lr * step / warmup_steps
     else:
-        # 正常学习率
+        # Normal learning rate
         return max_lr
 ```
 
-### 我们的配置
+### Our Configuration
 
 ```
 total_steps = 2000
@@ -72,34 +72,34 @@ warmup_steps = 100 (5%)
 
 ## Gradient Clipping
 
-### 为什么需要
+### Why It's Needed
 
-某些 batch 的梯度特别大 → 权重剧烈更新 → 训练崩溃
+Some batches produce very large gradients → drastic weight updates → training crashes.
 
 ```python
-# 限制梯度范数
+# Limit gradient norm
 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 ```
 
-### 经验值
+### Rule of Thumb
 
-| 场景 | max_norm |
-|------|----------|
-| 稳定训练 | 1.0 |
-| 激进训练 | 0.5 |
-| 不确定 | 从 1.0 开始 |
+| Scenario | max_norm |
+|----------|----------|
+| Stable training | 1.0 |
+| Aggressive training | 0.5 |
+| Unsure | Start with 1.0 |
 
 ---
 
-## Checkpoint 和恢复训练
+## Checkpointing and Resuming Training
 
-### 为什么重要
+### Why It Matters
 
-- GPU 可能中断
-- 需要增量实验
-- 成本控制
+- GPU jobs can be interrupted
+- Need for incremental experiments
+- Cost control
 
-### 我们的实现
+### Our Implementation
 
 ```python
 def save_checkpoint(model, optimizer, step, path):
@@ -116,28 +116,28 @@ def load_checkpoint(model, optimizer, path):
     return ckpt['step']
 ```
 
-### Modal 上的用法
+### Usage on Modal
 
 ```bash
-# 首次训练
+# First training run
 modal run experiment.py --experiment-name "v1" --max-seconds 600
 
-# 继续训练
+# Resume training
 modal run experiment.py --experiment-name "v1" --resume-from "v1" --max-seconds 1200
 ```
 
 ---
 
-## Batch Size 选择
+## Batch Size Selection
 
-### Trade-off
+### Trade-offs
 
-| Batch Size | 优点 | 缺点 |
+| Batch Size | Pros | Cons |
 |------------|------|------|
-| 大 | 梯度稳定、GPU 利用率高 | 内存大、泛化可能差 |
-| 小 | 内存小、正则化效果 | 梯度噪声、慢 |
+| Large | Stable gradients, high GPU utilization | More memory, may generalize worse |
+| Small | Less memory, regularization effect | Noisy gradients, slower |
 
-### 我们的经验
+### Our Experience
 
 ```
 A100 80GB:
@@ -148,9 +148,9 @@ T4 16GB:
 - batch_size=8, seq_len=512 ✓
 ```
 
-### 有效 Batch Size
+### Effective Batch Size
 
-如果内存不够，用梯度累积：
+If memory is limited, use gradient accumulation:
 
 ```python
 accumulation_steps = 4
@@ -165,45 +165,45 @@ for i, batch in enumerate(dataloader):
 
 ---
 
-## 数据加载优化
+## Data Loading Optimization
 
-### DataLoader 参数
+### DataLoader Parameters
 
 ```python
 dataloader = DataLoader(
     dataset,
     batch_size=32,
     shuffle=True,
-    num_workers=4,      # 并行加载
-    pin_memory=True,    # GPU 传输更快
-    prefetch_factor=2,  # 预加载
+    num_workers=4,      # parallel loading
+    pin_memory=True,    # faster GPU transfer
+    prefetch_factor=2,  # prefetch batches
 )
 ```
 
-### 我们踩的坑
+### A Pitfall We Hit
 
 ```python
-# ❌ 错误：每次都从头读文件
+# ❌ Wrong: reads the file from scratch every time
 for epoch in range(100):
-    data = load_all_data()  # 慢！
+    data = load_all_data()  # slow!
     train(data)
 
-# ✅ 正确：预加载 + memory map
+# ✅ Right: preload + memory map
 data = np.memmap('data.bin', dtype='uint16', mode='r')
 dataloader = DataLoader(MemMapDataset(data), ...)
 ```
 
 ---
 
-## 混合精度训练
+## Mixed Precision Training
 
-### 为什么用
+### Why Use It
 
-- FP16 计算更快
-- 内存减半
-- 大多数场景精度足够
+- FP16 computation is faster
+- Memory usage halved
+- Precision is sufficient for most cases
 
-### PyTorch 实现
+### PyTorch Implementation
 
 ```python
 from torch.cuda.amp import autocast, GradScaler
@@ -211,39 +211,39 @@ from torch.cuda.amp import autocast, GradScaler
 scaler = GradScaler()
 
 for batch in dataloader:
-    with autocast():  # FP16 前向
+    with autocast():  # FP16 forward pass
         loss = model(batch)
     
-    scaler.scale(loss).backward()  # 缩放梯度
+    scaler.scale(loss).backward()  # scaled gradients
     scaler.step(optimizer)
     scaler.update()
 ```
 
 ---
 
-## 我们的完整训练配置
+## Our Complete Training Configuration
 
 ```python
 config = {
-    # 模型
+    # Model
     "dim": 512,
     "n_layers": 9,
     "n_heads": 8,
     
-    # 优化器
+    # Optimizer
     "optimizer": "adamw",
     "lr": 6e-4,
     "weight_decay": 0.1,
     "betas": (0.9, 0.95),
     
-    # 训练
+    # Training
     "batch_size": 32,
     "seq_len": 1024,
     "warmup_steps": 100,
     "max_steps": 2000,
     "grad_clip": 1.0,
     
-    # 效率
+    # Efficiency
     "mixed_precision": True,
     "compile": True,  # torch.compile
 }
@@ -251,49 +251,49 @@ config = {
 
 ---
 
-## 常见问题排查
+## Troubleshooting Guide
 
-| 症状 | 可能原因 | 解决方案 |
-|------|----------|----------|
-| Loss 不降 | lr 太小/太大 | 调整 lr |
-| Loss 爆炸 | 梯度爆炸 | 加 gradient clipping |
-| OOM | batch 太大 | 减小 batch 或用梯度累积 |
-| 训练太慢 | DataLoader 瓶颈 | 增加 num_workers |
-| 过拟合 | 正则化不足 | 加 weight decay/dropout |
+| Symptom | Possible Cause | Solution |
+|---------|---------------|----------|
+| Loss not decreasing | lr too small/large | Adjust lr |
+| Loss explodes | Gradient explosion | Add gradient clipping |
+| OOM | Batch too large | Reduce batch or use gradient accumulation |
+| Training too slow | DataLoader bottleneck | Increase num_workers |
+| Overfitting | Insufficient regularization | Add weight decay/dropout |
 
 ---
 
-## 🚨 成本控制（血泪教训）
+## 🚨 Cost Control (Lessons Learned the Hard Way)
 
-### 我们的 $184 事故
+### Our $184 Incident
 
 ```
-问题：用 process poll 频繁监控训练
-结果：7 分钟花了 $184
+Problem: Frequently polling training progress with process poll
+Result: $184 spent in 7 minutes
 
-原因：
-- 每次 poll 返回几千行训练日志
-- 日志全部存入会话历史
-- 会话膨胀到 58MB
-- Claude Opus input $15/M tokens
+Cause:
+- Each poll returned thousands of lines of training logs
+- All logs stored in session history
+- Session grew to 58MB
+- Claude Opus input costs $15/M tokens
 ```
 
-### 解决方案
+### Solutions
 
-1. **不要 poll 长任务**
-2. **日志写文件，只发摘要**
-3. **用 isolated cron 监控**
+1. **Don't poll long-running jobs**
+2. **Write logs to a file, only send summaries**
+3. **Use isolated cron jobs for monitoring**
 
 ```python
-# ❌ 每 50 步打印
+# ❌ Print every 50 steps
 if step % 50 == 0:
-    print(f"Step {step}, Loss {loss}")  # 太多！
+    print(f"Step {step}, Loss {loss}")  # too much!
 
-# ✅ 每 500 步打印
+# ✅ Print every 500 steps
 if step % 500 == 0:
     print(f"Step {step}, Loss {loss}")
 ```
 
 ---
 
-*上一篇：[非 Transformer 架构](06-alternative-architectures.md)*
+*Previous: [Alternative Architectures](06-alternative-architectures.md)*

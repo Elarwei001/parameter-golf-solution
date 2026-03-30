@@ -1,98 +1,98 @@
-# 优化器
+# Optimizers
 
-> 训练神经网络的"司机"。选对优化器，收敛更快、效果更好。
+> The "driver" of neural network training. Choose the right optimizer for faster convergence and better results.
 
-## 一句话定义
+## One-Line Definition
 
-**优化器 = 决定如何根据梯度更新权重**
+**Optimizer = Decides how to update weights based on gradients**
 
-梯度告诉你"往哪走"，优化器决定"走多快、怎么走"。
+Gradients tell you "which direction to go"; the optimizer decides "how fast and how to get there".
 
 ---
 
-## 梯度下降基础
+## Gradient Descent Basics
 
-最简单的更新规则：
+The simplest update rule:
 
 $$
 w_{new} = w_{old} - \eta \cdot \nabla L
 $$
 
-- **w**：权重
-- **η (eta)**：学习率
-- **∇L**：损失函数的梯度
+- **w**: weights
+- **η (eta)**: learning rate
+- **∇L**: gradient of the loss function
 
-**问题**：
-- 学习率太大 → 震荡
-- 学习率太小 → 太慢
-- 所有参数用同一个学习率不合理
+**Problems**:
+- Learning rate too large → oscillation
+- Learning rate too small → too slow
+- Using the same learning rate for all parameters is unreasonable
 
 ---
 
-## Adam（最常用）
+## Adam (Most Common)
 
-**核心思想**：为每个参数维护独立的学习率，基于历史梯度自适应调整。
+**Core idea**: Maintain an individual learning rate for each parameter, adapting based on historical gradients.
 
 $$
-m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t \quad \text{(动量)}
+m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t \quad \text{(momentum)}
 $$
 $$
-v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad \text{(二阶矩)}
+v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad \text{(second moment)}
 $$
 $$
 w_t = w_{t-1} - \eta \cdot \frac{m_t}{\sqrt{v_t} + \epsilon}
 $$
 
-**直觉**：
-- **m (动量)**：平滑梯度，避免震荡
-- **v (二阶矩)**：估计梯度的"波动性"，波动大的参数学习率小
-- **ε**：防止除以零
+**Intuition**:
+- **m (momentum)**: Smooths gradients to avoid oscillation
+- **v (second moment)**: Estimates gradient "volatility" — parameters with high volatility get smaller learning rates
+- **ε**: Prevents division by zero
 
 ---
 
-## AdamW（我们的选择 🏆）
+## AdamW (Our Choice 🏆)
 
-**改进**：把 weight decay 从 Adam 更新公式里分离出来。
+**Improvement**: Decouples weight decay from the Adam update formula.
 
 ```python
-# Adam 的 weight decay（有问题）
+# Adam's weight decay (problematic)
 gradient = gradient + weight_decay * weight
 
-# AdamW 的 weight decay（正确）
+# AdamW's weight decay (correct)
 weight = weight - learning_rate * weight_decay * weight
 ```
 
-**为什么更好**：
-- 正则化效果更干净
-- 和学习率解耦
-- 训练更稳定
+**Why it's better**:
+- Cleaner regularization effect
+- Decoupled from learning rate
+- More stable training
 
 ---
 
-## Muon（新秀）
+## Muon (The New Kid)
 
-**论文声称**：比 Adam 快 2 倍收敛。
+**Paper claims**: Converges 2x faster than Adam.
 
-**核心思想**：用 Newton 法代替 SGD，更精确地估计更新方向。
+**Core idea**: Replaces SGD with Newton's method for a more accurate estimate of update direction.
 
-**我们的实验**：
+**Our experiments**:
 
-| 时间 | AdamW | Muon |
+| Time | AdamW | Muon |
 |------|-------|------|
 | 15min | 4.07 | **3.99** ✓ |
 | 30min | **3.73** | 3.91 |
 | 60min | **3.55** 🏆 | 3.85 |
 
-**结论**：
-- Muon 开局快
-- 但 AdamW 长期更稳
-- **不要盲信论文**，要实测！
+**Conclusion**:
+- Muon starts fast
+- But AdamW is more stable long-term
+- **Don't blindly trust papers** — always run your own experiments!
 
 ---
 
-## 学习率调度
+## Learning Rate Scheduling
 
-光选优化器不够，学习率怎么变化也很重要：
+Choosing an optimizer isn't enough — how the learning rate changes over time matters too.
 
 ### Warmup
 
@@ -107,7 +107,7 @@ lr
    warmup
 ```
 
-**为什么**：训练初期权重很随机，大学习率容易崩。先小后大。
+**Why**: Early in training, weights are random and gradients are unstable. A large learning rate can easily cause divergence. Start small, then increase.
 
 ### Cosine Decay
 
@@ -121,11 +121,11 @@ lr
 └─────────────── step
 ```
 
-**为什么**：后期需要更小的学习率来精细调整。
+**Why**: Later in training, a smaller learning rate helps with fine-grained adjustments.
 
 ---
 
-## 我们的配置
+## Our Configuration
 
 ```python
 optimizer = torch.optim.AdamW(
@@ -135,7 +135,7 @@ optimizer = torch.optim.AdamW(
     weight_decay=0.1,
 )
 
-# 带 warmup 的 cosine 调度
+# Cosine schedule with warmup
 scheduler = get_cosine_schedule_with_warmup(
     optimizer,
     num_warmup_steps=100,
@@ -145,10 +145,10 @@ scheduler = get_cosine_schedule_with_warmup(
 
 ---
 
-## 调参建议
+## Tuning Guide
 
-| 参数 | 常见范围 | 我们的值 |
-|------|----------|----------|
+| Parameter | Typical Range | Our Value |
+|-----------|---------------|-----------|
 | **lr** | 1e-4 ~ 1e-3 | 6e-4 |
 | **weight_decay** | 0.01 ~ 0.1 | 0.1 |
 | **warmup_steps** | 1% ~ 5% of total | 100 |
@@ -157,26 +157,26 @@ scheduler = get_cosine_schedule_with_warmup(
 
 ---
 
-## 常见问题
+## Common Questions
 
-### Q: 训练不收敛？
+### Q: Training not converging?
 
-1. 学习率太大 → 降低 lr
-2. 没有 warmup → 加上
-3. 梯度爆炸 → 加 gradient clipping
+1. Learning rate too large → reduce lr
+2. No warmup → add it
+3. Exploding gradients → add gradient clipping
 
-### Q: 收敛太慢？
+### Q: Converging too slowly?
 
-1. 学习率太小 → 提高 lr
-2. batch size 太小 → 增大
-3. 换更激进的优化器（如 Muon）
+1. Learning rate too small → increase lr
+2. Batch size too small → increase it
+3. Try a more aggressive optimizer (e.g., Muon)
 
-### Q: 过拟合？
+### Q: Overfitting?
 
-1. weight_decay 太小 → 增大
-2. 加 dropout
-3. 减少模型大小
+1. weight_decay too small → increase it
+2. Add dropout
+3. Reduce model size
 
 ---
 
-*上一篇：[注意力变体](03-attention-variants.md) | 下一篇：[量化](05-quantization.md)*
+*Previous: [Attention Variants](03-attention-variants.md) | Next: [Quantization](05-quantization.md)*

@@ -1,16 +1,16 @@
-# 注意力变体
+# Attention Variants
 
-> Full Attention 太贵？试试这些变体。Sliding Window 在短序列上效果出奇地好。
+> Full Attention too expensive? Try these variants. Sliding Window works surprisingly well on short sequences.
 
-## 一句话定义
+## One-Line Definition
 
-**注意力变体 = 用不同方式限制"谁能看到谁"**
+**Attention Variants = Different ways to restrict "who can see whom"**
 
-Full Attention 让每个 token 看所有 token，O(n²) 复杂度。变体通过限制视野来降低成本。
+Full Attention lets every token see all other tokens, with O(n²) complexity. Variants reduce cost by limiting the field of view.
 
 ---
 
-## Full Attention（标准版）
+## Full Attention (Standard)
 
 ```
 Token:  1  2  3  4  5
@@ -20,17 +20,17 @@ Token:  1  2  3  4  5
     4   ✓  ✓  ✓  ✓  ✓
     5   ✓  ✓  ✓  ✓  ✓
 
-每个 token 能看到所有其他 token
+Every token can see all other tokens
 ```
 
-**问题**：
-- 计算量 O(n²)
-- 内存 O(n²)
-- 序列长了就爆炸
+**Problems**:
+- Computation O(n²)
+- Memory O(n²)
+- Explodes with longer sequences
 
 ---
 
-## Causal Attention（GPT 用的）
+## Causal Attention (Used by GPT)
 
 ```
 Token:  1  2  3  4  5
@@ -40,17 +40,17 @@ Token:  1  2  3  4  5
     4   ✓  ✓  ✓  ✓  ✗
     5   ✓  ✓  ✓  ✓  ✓
 
-只能看到自己和之前的 token（不能偷看未来）
+Can only see itself and previous tokens (no peeking at the future)
 ```
 
-**为什么需要**：语言模型是自回归的，预测下一个 token 时不能知道答案。
+**Why it's needed**: Language models are autoregressive — when predicting the next token, the answer can't be revealed in advance.
 
 ---
 
-## Sliding Window Attention（我们用的 🏆）
+## Sliding Window Attention (What we use 🏆)
 
 ```
-窗口大小 = 3
+Window size = 3
 
 Token:  1  2  3  4  5
     1   ✓  ✓  ✓  ✗  ✗
@@ -59,48 +59,48 @@ Token:  1  2  3  4  5
     4   ✗  ✓  ✓  ✓  ✓
     5   ✗  ✗  ✓  ✓  ✓
 
-每个 token 只看前后 k 个（局部窗口）
+Each token only looks at the k nearest neighbors (local window)
 ```
 
-**优点**：
-- 计算量 O(n × k)，k 是窗口大小
-- 局部信息通常最重要
-- 通过堆叠层数，间接获得全局视野
+**Advantages**:
+- Computation O(n × k), where k is the window size
+- Local information is usually most important
+- Indirect global view achieved by stacking layers
 
-**我们的配置**：
+**Our configuration**:
 ```python
-window_size = 256  # 每个 token 看前后 256 个
+window_size = 256  # each token looks at 256 nearest neighbors
 ```
 
 ---
 
-## 我们的实验结果
+## Our Experimental Results
 
 | Attention | BPB | vs Baseline |
 |-----------|-----|-------------|
 | Full (Causal) | 2.4939 | — |
 | **Sliding Window** | **2.3568** | **-5.5%** 🏆 |
 
-**意外发现**：在短序列（128 tokens）上，Sliding Window 竟然比 Full Attention 更好！
+**Unexpected finding**: On short sequences (128 tokens), Sliding Window actually outperforms Full Attention!
 
-**可能原因**：
-1. 局部注意力提供了有用的归纳偏置
-2. 减少了噪声（不需要关注太远的 token）
-3. 类似于 CNN 的局部感受野
+**Possible reasons**:
+1. Local attention provides useful inductive bias
+2. Reduces noise (no need to attend to tokens far away)
+3. Similar to CNN's local receptive field
 
 ---
 
-## 实现细节：RoPE 的坑
+## Implementation Details: The RoPE Bug
 
-我们遇到的 Bug：
+A bug we encountered:
 
 ```
 RuntimeError: index out of bounds
 ```
 
-**原因**：RoPE 位置编码预分配了固定大小的 cos/sin 表，序列超长就越界。
+**Cause**: RoPE positional encoding pre-allocated a fixed-size cos/sin table, and exceeding the sequence length caused an out-of-bounds error.
 
-**解决**：写了 `RotaryEmbeddingDynamic`，自动扩展表大小。
+**Fix**: We wrote `RotaryEmbeddingDynamic`, which automatically expands the table size.
 
 ```python
 class RotaryEmbeddingDynamic(nn.Module):
@@ -111,12 +111,12 @@ class RotaryEmbeddingDynamic(nn.Module):
         self._build_cache(max_seq_len)
     
     def _build_cache(self, seq_len):
-        # 构建 cos/sin 缓存
+        # Build cos/sin cache
         ...
     
     def forward(self, x, seq_len):
         if seq_len > self.max_seq_len:
-            # 自动扩展！
+            # Auto-expand!
             self.max_seq_len = seq_len * 2
             self._build_cache(self.max_seq_len)
         return self._apply_rotary(x, seq_len)
@@ -124,26 +124,26 @@ class RotaryEmbeddingDynamic(nn.Module):
 
 ---
 
-## 其他变体（我们没试）
+## Other Variants (Not Tried)
 
-| 变体 | 思路 | 适用场景 |
-|------|------|----------|
-| **Sparse Attention** | 只关注特定模式（如隔一个看一个）| 超长序列 |
-| **Linear Attention** | 用核技巧把 O(n²) 变 O(n) | 效率优先 |
-| **Flash Attention** | 不改数学，优化 GPU 内存访问 | 通用加速 |
-| **Multi-Query Attention** | 多个 Q 共享 K/V | 推理加速 |
-
----
-
-## 选择建议
-
-| 序列长度 | 推荐 |
-|----------|------|
-| 短（<512） | Sliding Window 或 Full |
-| 中（512-4K） | Full + Flash Attention |
-| 长（>4K） | Sliding Window 或 Sparse |
-| 超长（>100K） | Mamba/SSM（非 Attention）|
+| Variant | Idea | Use Case |
+|---------|------|----------|
+| **Sparse Attention** | Only attend to specific patterns (e.g., every other token) | Very long sequences |
+| **Linear Attention** | Use kernel trick to reduce O(n²) to O(n) | Efficiency-first |
+| **Flash Attention** | Same math, optimized GPU memory access | General speedup |
+| **Multi-Query Attention** | Multiple Q heads share K/V | Inference speedup |
 
 ---
 
-*上一篇：[激活函数](02-activation-functions.md) | 下一篇：[优化器](04-optimizers.md)*
+## Recommendation Guide
+
+| Sequence Length | Recommendation |
+|-----------------|----------------|
+| Short (<512) | Sliding Window or Full |
+| Medium (512–4K) | Full + Flash Attention |
+| Long (>4K) | Sliding Window or Sparse |
+| Very long (>100K) | Mamba/SSM (non-Attention) |
+
+---
+
+*Previous: [Activation Functions](02-activation-functions.md) | Next: [Optimizers](04-optimizers.md)*

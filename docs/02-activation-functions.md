@@ -1,18 +1,18 @@
-# 激活函数
+# Activation Functions
 
-> FFN 里的"非线性魔法"。选对激活函数，BPB 能降好几个点。
+> The "nonlinear magic" inside FFN. Choosing the right activation can drop BPB by several points.
 
-## 一句话定义
+## One-Sentence Definition
 
-**激活函数 = 给神经网络加入非线性**
+**Activation function = Adding nonlinearity to neural networks**
 
-没有激活函数，不管堆多少层，神经网络就是个线性变换，表达能力极弱。
+Without activation functions, no matter how many layers you stack, a neural network is just a linear transformation with very limited expressiveness.
 
 ---
 
-## 常见激活函数
+## Common Activation Functions
 
-### 1. ReLU（最经典）
+### 1. ReLU (The Classic)
 
 $$
 \text{ReLU}(x) = \max(0, x)
@@ -26,33 +26,33 @@ $$
      │╱
 ```
 
-**优点**：简单、计算快
-**缺点**：负数全变 0，可能"神经元死亡"
+**Pros**: Simple, fast to compute
+**Cons**: Negative values become 0, may cause "dead neurons"
 
-### 2. GELU（GPT 系列用）
+### 2. GELU (Used by GPT series)
 
 $$
 \text{GELU}(x) = x \cdot \Phi(x)
 $$
 
-其中 Φ 是标准正态分布的 CDF。
+Where Φ is the CDF of the standard normal distribution.
 
-**直觉**：比 ReLU 更平滑，负数不会完全变 0。
+**Intuition**: Smoother than ReLU, negative values don't completely become 0.
 
-### 3. SwiGLU（我们的 baseline）
+### 3. SwiGLU (Our baseline)
 
 $$
 \text{SwiGLU}(x) = \text{Swish}(xW_1) \otimes (xW_2)
 $$
 
-其中 Swish(x) = x · sigmoid(x)，⊗ 是逐元素乘法。
+Where Swish(x) = x · sigmoid(x), and ⊗ is element-wise multiplication.
 
-**特点**：
-- 两个线性变换 + 门控机制
-- LLaMA、PaLM 等模型使用
-- 效果好但参数多一些
+**Characteristics**:
+- Two linear transforms + gating mechanism
+- Used by LLaMA, PaLM, etc.
+- Good performance but more parameters
 
-### 4. LeakyReLU²（我们的改进 🏆）
+### 4. LeakyReLU² (Our improvement 🏆)
 
 $$
 \text{LeakyReLU}^2(x) = \text{LeakyReLU}(x, 0.5)^2
@@ -63,25 +63,25 @@ def leaky_relu_squared(x, negative_slope=0.5):
     return F.leaky_relu(x, negative_slope).square()
 ```
 
-**为什么有效？**
-1. **平方**：让输出更平滑，梯度更稳定
-2. **LeakyReLU**：负数不会完全消失（slope=0.5）
-3. **简单**：比 SwiGLU 计算量少
+**Why does it work?**
+1. **Squaring**: Smoother output, more stable gradients
+2. **LeakyReLU**: Negative values don't completely vanish (slope=0.5)
+3. **Simple**: Less computation than SwiGLU
 
 ---
 
-## 我们的实验结果
+## Our Experiment Results
 
 | 激活函数 | BPB | vs Baseline |
 |----------|-----|-------------|
 | SwiGLU (baseline) | 2.4939 | — |
 | **LeakyReLU²** | **2.3875** | **-4.3%** 🏆 |
 
-**结论**：简单的 LeakyReLU² 竟然比复杂的 SwiGLU 更好！
+**Conclusion**: Simple LeakyReLU² actually beats the more complex SwiGLU!
 
 ---
 
-## 代码实现
+## Code Implementation
 
 ```python
 import torch
@@ -102,22 +102,22 @@ class LeakyReLUSquaredMLP(nn.Module):
 
 ---
 
-## 为什么激活函数这么重要？
+## Why Are Activation Functions So Important?
 
-1. **非线性**：没有它，深度网络 = 浅层网络
-2. **梯度流动**：选错了可能梯度消失/爆炸
-3. **表达能力**：决定网络能学什么函数
-
----
-
-## 选择建议
-
-| 场景 | 推荐 |
-|------|------|
-| 通用场景 | GELU 或 SwiGLU |
-| 追求效率 | ReLU 或 LeakyReLU |
-| Parameter Golf | LeakyReLU²（我们验证过！）|
+1. **Nonlinearity**: Without it, deep networks = shallow networks
+2. **Gradient flow**: Wrong choice can cause vanishing/exploding gradients
+3. **Expressiveness**: Determines what functions the network can learn
 
 ---
 
-*上一篇：[Transformer 基础](01-transformer-basics.md) | 下一篇：[注意力变体](03-attention-variants.md)*
+## Recommendations
+
+| Scenario | Recommendation |
+|----------|----------------|
+| General use | GELU or SwiGLU |
+| Efficiency-focused | ReLU or LeakyReLU |
+| Parameter Golf | LeakyReLU² (we validated it!) |
+
+---
+
+*Previous: [Transformer Basics](01-transformer-basics.md) | Next: [Attention Variants](03-attention-variants.md)*
