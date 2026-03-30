@@ -10,6 +10,14 @@ Without activation functions, no matter how many layers you stack, a neural netw
 
 ---
 
+## Visual Overview
+
+![Activation Functions Comparison](images/activation-functions.png)
+
+*Figure: ReLU, LeakyReLU, and LeakyReLU² (our best performer)*
+
+---
+
 ## Common Activation Functions
 
 ### 1. ReLU (The Classic)
