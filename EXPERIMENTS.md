@@ -74,6 +74,49 @@
 
 ---
 
+## Key Lesson: Trade-offs Must Be Utilized
+
+> **Every technique is a trade-off. But a trade-off only works if you USE what you gained.**
+
+### Weight Sharing — We Did It Wrong
+
+| Trade-off | What We Did |
+|-----------|-------------|
+| **Give up**: Model expressiveness (all layers share weights) | ✅ We sacrificed this |
+| **Get**: Save parameters → can add more layers | ❌ **We didn't do this!** |
+
+**The right way**: Use the saved parameters to add more layers!
+
+```
+What we did:   9 layers × shared weights = fewer params, same depth
+What we should: 18 layers × shared weights = same params, DEEPER model!
+```
+
+We only had the "give up" without the "get". That's why it didn't help.
+
+### Text Diffusion — Wrong Tool for the Job
+
+| Trade-off | What We Did |
+|-----------|-------------|
+| **Give up**: Autoregressive modeling | ✅ We wanted to sacrifice this |
+| **Get**: Parallel generation, editability | ❌ **Competition doesn't need this!** |
+
+**The problem**: Text Diffusion's advantages (parallel generation) are useless for BPB evaluation, and diffusion loss is incompatible with BPB metric.
+
+### Framework for Evaluating Techniques
+
+Before trying any technique, ask: **"What I give up — is what I get useful in THIS scenario?"**
+
+| Technique | Give Up | Get | Useful for Parameter Golf? |
+|-----------|---------|-----|---------------------------|
+| Weight Sharing | Expressiveness | Save params | ⚠️ Only if you add layers |
+| Text Diffusion | Autoregressive | Parallel gen | ❌ Competition doesn't need |
+| Sliding Window | Global view | Efficiency + local bias | ✅ Useful! |
+| LeakyReLU² | SwiGLU's gating | Simplicity + smooth gradients | ✅ Useful! |
+| Mamba | Attention's direct access | O(n) complexity | ❌ Short sequences don't need |
+
+---
+
 ## Failed Approaches (Don't Repeat These)
 
 ### 1. Polling Training Logs
