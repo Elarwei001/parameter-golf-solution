@@ -1,0 +1,23 @@
+[
+  {
+    "name": "baseline_swiglu",
+    "steps": 1967,
+    "train_bpb": 1.4208423525681075,
+    "val_bpb": 2.4938681804313885,
+    "params": 4391168
+  },
+  {
+    "name": "leaky_relu2",
+    "steps": 1999,
+    "train_bpb": 1.4135822915631102,
+    "val_bpb": 2.3874524361592284,
+    "params": 4394240
+  },
+  {
+    "name": "sliding_window_fixed",
+    "steps": 1882,
+    "train_bpb": 1.465077581099817,
+    "val_bpb": 2.3568084470406374,
+    "params": 4391168
+  }
+]
