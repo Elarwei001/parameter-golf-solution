@@ -2,11 +2,11 @@
 
 > Our attempt at the [Parameter Golf Competition](https://parameter.golf) — training a small language model in 10 minutes on 8×H100 to minimize BPB.
 
-## Current Best: 2.2821 BPB 🏆🏆
+## Current Best: 2.1752 BPB 🏆🏆
 
 | Model | BPB | Notes |
 |-------|-----|-------|
-| **LeakyReLU² + Sliding Window** | **2.2821** | 🏆 Current best, combo power! |
+| **LeakyReLU² + Sliding Window** | **2.1752** | 🏆 Current best, combo power! |
 | Sliding Window only | 2.3568 | -5.5% vs baseline |
 | LeakyReLU² only | 2.3875 | -4.3% vs baseline |
 | Baseline (SwiGLU) | 2.4939 | StandardGPT reference |

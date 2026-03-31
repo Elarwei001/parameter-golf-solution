@@ -26,5 +26,41 @@
     "train_bpb": 1.5388530037779202,
     "val_bpb": 2.2820588449750736,
     "params": 4394240
+  },
+  {
+    "name": "ws064_ns0.5",
+    "steps": 1212,
+    "train_bpb": 1.7315575243554582,
+    "val_bpb": 2.206206928707937,
+    "params": 4394240,
+    "window_size": 64,
+    "negative_slope": 0.5
+  },
+  {
+    "name": "ws128_ns0.3",
+    "steps": 1221,
+    "train_bpb": 1.6928400883040071,
+    "val_bpb": 2.1807758111291906,
+    "params": 4394240,
+    "window_size": 128,
+    "negative_slope": 0.3
+  },
+  {
+    "name": "ws192_ns0.5",
+    "steps": 1177,
+    "train_bpb": 1.7280895354766455,
+    "val_bpb": 2.1752283817386227,
+    "params": 4394240,
+    "window_size": 192,
+    "negative_slope": 0.5
+  },
+  {
+    "name": "ws128_ns0.1",
+    "steps": 1213,
+    "train_bpb": 1.6536229102251583,
+    "val_bpb": 2.2239394492999907,
+    "params": 4394240,
+    "window_size": 128,
+    "negative_slope": 0.1
   }
 ]
