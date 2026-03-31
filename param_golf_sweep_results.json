@@ -1,0 +1,121 @@
+{
+  "baseline_bpb": 2.1752,
+  "best_lr": 0.0008,
+  "best_lr_bpb": 2.1937623672810944,
+  "best_dropout": 0.0,
+  "best_dropout_bpb": 2.219640278588517,
+  "best_window_size": 128,
+  "best_ws_bpb": 2.2046692318265726,
+  "best_overall_name": "lr=8e-04",
+  "best_overall_bpb": 2.1937623672810944,
+  "lr_results": [
+    {
+      "name": "lr=5e-04",
+      "steps": 646,
+      "train_bpb": 1.8591597701115714,
+      "val_bpb": 2.1962413854045586,
+      "params": 4394240,
+      "lr": 0.0005
+    },
+    {
+      "name": "lr=8e-04",
+      "steps": 648,
+      "train_bpb": 1.844562278266433,
+      "val_bpb": 2.1937623672810944,
+      "params": 4394240,
+      "lr": 0.0008
+    },
+    {
+      "name": "lr=1e-03",
+      "steps": 648,
+      "train_bpb": 1.848201126749398,
+      "val_bpb": 2.1983740476674507,
+      "params": 4394240,
+      "lr": 0.001
+    },
+    {
+      "name": "lr=2e-03",
+      "steps": 644,
+      "train_bpb": 1.8628539746503696,
+      "val_bpb": 2.2093189375770343,
+      "params": 4394240,
+      "lr": 0.0015
+    },
+    {
+      "name": "lr=2e-03",
+      "steps": 649,
+      "train_bpb": 1.8778856624950087,
+      "val_bpb": 2.200083426230039,
+      "params": 4394240,
+      "lr": 0.002
+    }
+  ],
+  "dropout_results": [
+    {
+      "name": "dropout=0.0",
+      "steps": 618,
+      "train_bpb": 1.8597953199590493,
+      "val_bpb": 2.219640278588517,
+      "params": 4394240,
+      "dropout": 0.0
+    },
+    {
+      "name": "dropout=0.05",
+      "steps": 282,
+      "train_bpb": 2.334916286981582,
+      "val_bpb": 2.435932565417018,
+      "params": 4394240,
+      "dropout": 0.05
+    },
+    {
+      "name": "dropout=0.1",
+      "steps": 283,
+      "train_bpb": 2.4371101719033113,
+      "val_bpb": 2.501803339554343,
+      "params": 4394240,
+      "dropout": 0.1
+    }
+  ],
+  "ws_results": [
+    {
+      "name": "ws=64",
+      "steps": 323,
+      "train_bpb": 2.146903465158367,
+      "val_bpb": 2.341458522498842,
+      "params": 4394240,
+      "window_size": 64
+    },
+    {
+      "name": "ws=96",
+      "steps": 448,
+      "train_bpb": 1.9784591165613497,
+      "val_bpb": 2.232022788674928,
+      "params": 4394240,
+      "window_size": 96
+    },
+    {
+      "name": "ws=128",
+      "steps": 606,
+      "train_bpb": 1.8636875917573668,
+      "val_bpb": 2.2046692318265726,
+      "params": 4394240,
+      "window_size": 128
+    },
+    {
+      "name": "ws=160",
+      "steps": 370,
+      "train_bpb": 2.0876163949950777,
+      "val_bpb": 2.3601896603531305,
+      "params": 4394240,
+      "window_size": 160
+    },
+    {
+      "name": "ws=192",
+      "steps": 305,
+      "train_bpb": 2.200304564962171,
+      "val_bpb": 2.3930470661883256,
+      "params": 4394240,
+      "window_size": 192
+    }
+  ]
+}
