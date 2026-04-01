@@ -1,17 +1,16 @@
 """
-Modal QAT Training - Quantization-Aware Training with Ternary (1.58-bit) Weights
+Modal QAT Training v2 - Larger model to use 16MB budget
 
-Based on BitNet b1.58: weights are {-1, 0, 1} during forward pass,
-but we maintain full-precision "shadow weights" for gradient updates.
+Config: dim=560, 10 layers, ~39M params, ~16MB quantized
 
 Usage:
-    modal run modal_qat.py::train_qat --steps 5000
+    modal run modal_qat_v2.py::train_qat_v2 --steps 5000
 """
 import modal
 import os
 import math
 
-app = modal.App("parameter-golf-qat")
+app = modal.App("parameter-golf-qat-v2")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -31,19 +30,19 @@ data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=Tr
     volumes={"/data": data_volume},
     timeout=1800,
 )
-def train_qat(
+def train_qat_v2(
     steps: int = 5000,
-    dim: int = 512,
-    n_layers: int = 9,
+    dim: int = 560,        # Increased from 512
+    n_layers: int = 10,    # Increased from 9
     n_heads: int = 8,
     n_kv_heads: int = 4,
     window_size: int = 192,
     lr: float = 1e-3,
     batch_size: int = 64,
     seq_len: int = 256,
-    warmup_steps: int = 500,  # FP16 warmup before QAT
+    warmup_steps: int = 500,
 ):
-    """Train GPT with Ternary QAT on H100"""
+    """Train larger GPT with Ternary QAT on H100"""
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
@@ -56,7 +55,7 @@ def train_qat(
     
     print(f"Device: {DEVICE}")
     print(f"CUDA: {torch.cuda.get_device_name()}")
-    print(f"Vocab Size: {VOCAB_SIZE}")
+    print(f"Config: dim={dim}, layers={n_layers}, heads={n_heads}")
     print(f"QAT: Ternary (1.58-bit) weights")
     
     # ── Load Data ─────────────────────────────────────────────
@@ -89,24 +88,16 @@ def train_qat(
     
     # ── Ternary Quantization with STE ─────────────────────────
     class TernaryQuantize(torch.autograd.Function):
-        """
-        Quantize weights to {-1, 0, 1} with Straight-Through Estimator (STE).
-        Forward: quantized weights
-        Backward: gradients pass through as-is
-        """
         @staticmethod
         def forward(ctx, weight):
-            # Scale by mean absolute value
             scale = weight.abs().mean() + 1e-8
-            # Quantize to {-1, 0, 1}
             w_quant = torch.clamp(torch.round(weight / scale), -1, 1)
             ctx.save_for_backward(weight)
             ctx.scale = scale
-            return w_quant * scale  # Return scaled back for computation
+            return w_quant * scale
         
         @staticmethod
         def backward(ctx, grad_output):
-            # Straight-through estimator: pass gradients unchanged
             return grad_output
     
     def ternary_quantize(weight):
@@ -114,17 +105,13 @@ def train_qat(
     
     # ── QAT Linear Layer ──────────────────────────────────────
     class QATLinear(nn.Module):
-        """Linear layer with ternary quantization during forward pass."""
         def __init__(self, in_features, out_features, bias=False, qat_enabled=False):
             super().__init__()
             self.in_features = in_features
             self.out_features = out_features
             self.qat_enabled = qat_enabled
-            
-            # Shadow weights (full precision for training)
             self.weight = nn.Parameter(torch.empty(out_features, in_features))
             nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-            
             if bias:
                 self.bias = nn.Parameter(torch.zeros(out_features))
             else:
@@ -132,18 +119,13 @@ def train_qat(
         
         def forward(self, x):
             if self.qat_enabled:
-                # Use quantized weights
                 w = ternary_quantize(self.weight)
             else:
-                # Use full precision weights
                 w = self.weight
             return F.linear(x, w, self.bias)
         
         def enable_qat(self):
             self.qat_enabled = True
-        
-        def disable_qat(self):
-            self.qat_enabled = False
     
     # ── Model Components ──────────────────────────────────────
     class RMSNorm(nn.Module):
@@ -184,7 +166,6 @@ def train_qat(
         return q_embed, k_embed
     
     class MLP_ReLU2(nn.Module):
-        """ReLU² MLP with QAT support."""
         def __init__(self, dim, mult=4, qat_enabled=False):
             super().__init__()
             hidden = int(dim * mult)
@@ -200,7 +181,6 @@ def train_qat(
             self.w2.enable_qat()
     
     class AttentionSW(nn.Module):
-        """Sliding Window Attention with QAT support."""
         def __init__(self, dim, n_heads, n_kv_heads=None, window_size=128, qat_enabled=False):
             super().__init__()
             self.n_heads = n_heads
@@ -276,7 +256,7 @@ def train_qat(
             ])
             self.norm = RMSNorm(dim)
             self.head = nn.Linear(dim, vocab_size, bias=False)
-            self.tok_emb.weight = self.head.weight  # weight tying
+            self.tok_emb.weight = self.head.weight
         
         def forward(self, idx):
             B, L = idx.shape
@@ -293,13 +273,11 @@ def train_qat(
                                    batch[:, 1:].reshape(-1))
         
         def enable_qat(self):
-            """Enable QAT for all transformer layers (not embeddings)."""
             for layer in self.layers:
                 layer.enable_qat()
             print("✅ QAT enabled for all transformer layers")
         
         def count_ternary_params(self):
-            """Count parameters that will be ternary quantized."""
             ternary = 0
             fp = 0
             for name, param in self.named_parameters():
@@ -347,12 +325,10 @@ def train_qat(
     print(f"  Ternary (1.58-bit): {ternary_params/1e6:.2f}M")
     print(f"  Full precision: {fp_params/1e6:.2f}M")
     
-    # Estimate model size with ternary quantization
     ternary_size_mb = (ternary_params * 1.58) / 8 / 1e6
-    fp_size_mb = (fp_params * 16) / 8 / 1e6  # Embeddings stay FP16
+    fp_size_mb = (fp_params * 16) / 8 / 1e6
     total_size_mb = ternary_size_mb + fp_size_mb
     print(f"\nEstimated quantized size: {total_size_mb:.2f} MB")
-    print(f"  (Ternary layers: {ternary_size_mb:.2f} MB, FP16 embed: {fp_size_mb:.2f} MB)")
     
     # ── Optimizer ─────────────────────────────────────────────
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.1)
@@ -361,8 +337,9 @@ def train_qat(
     # ── Training Loop ─────────────────────────────────────────
     LOG_EVERY = 100
     print(f"\n{'='*60}")
-    print(f"Training GPT with QAT (Ternary 1.58-bit)")
-    print(f"Steps: {steps} | Warmup: {warmup_steps} (FP16) | Batch: {batch_size}")
+    print(f"Training GPT v2 with QAT")
+    print(f"Config: dim={dim}, layers={n_layers}, ~{total_size_mb:.1f}MB")
+    print(f"Steps: {steps} | Warmup: {warmup_steps} | Batch: {batch_size}")
     print(f"{'='*60}\n")
     
     start_time = time.time()
@@ -370,7 +347,6 @@ def train_qat(
     qat_enabled = False
     
     for step in range(1, steps + 1):
-        # Enable QAT after warmup
         if step == warmup_steps + 1 and not qat_enabled:
             model.enable_qat()
             qat_enabled = True
@@ -400,6 +376,7 @@ def train_qat(
     
     print(f"\n{'='*60}")
     print(f"Training Complete!")
+    print(f"  Config: dim={dim}, layers={n_layers}")
     print(f"  Final Val Loss: {final_loss:.4f}")
     print(f"  Final Val BPB:  {final_bpb:.4f}")
     print(f"  Best Val BPB:   {best_bpb:.4f}")
@@ -411,7 +388,7 @@ def train_qat(
     checkpoint_dir = "/data/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
-    checkpoint_name = f"qat_dim{dim}_L{n_layers}_bpb{final_bpb:.3f}.pt"
+    checkpoint_name = f"qat_v2_dim{dim}_L{n_layers}_bpb{final_bpb:.3f}.pt"
     checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
     
     checkpoint = {
@@ -427,27 +404,19 @@ def train_qat(
         'metrics': {
             'final_bpb': final_bpb,
             'best_bpb': best_bpb,
-            'final_loss': final_loss,
-        },
-        'training': {
-            'steps': steps,
-            'warmup_steps': warmup_steps,
-            'batch_size': batch_size,
-            'seq_len': seq_len,
-            'lr': lr,
         },
     }
     
+    import torch
     torch.save(checkpoint, checkpoint_path)
-    data_volume.commit()  # Persist to volume
+    data_volume.commit()
     print(f"\n💾 Checkpoint saved to: {checkpoint_path}")
     
     return {
+        "config": f"dim={dim}, layers={n_layers}",
         "final_bpb": final_bpb,
         "best_bpb": best_bpb,
-        "final_loss": final_loss,
         "params": n_params,
-        "ternary_params": ternary_params,
         "estimated_size_mb": total_size_mb,
         "time_seconds": total_time,
         "checkpoint_path": checkpoint_path,
@@ -456,8 +425,9 @@ def train_qat(
 
 @app.local_entrypoint()
 def main():
-    print("Parameter Golf - QAT (Ternary 1.58-bit) Training")
+    print("Parameter Golf - QAT v2 (Larger Model)")
     print("=" * 50)
-    print("Commands:")
-    print("  modal run modal_qat.py::train_qat --steps 5000")
-    print("  modal run modal_qat.py::train_qat --steps 5000 --warmup-steps 1000")
+    print("Configs to try:")
+    print("  modal run modal_qat_v2.py::train_qat_v2 --dim 560 --n-layers 10")
+    print("  modal run modal_qat_v2.py::train_qat_v2 --dim 576 --n-layers 9")
+    print("  modal run modal_qat_v2.py::train_qat_v2 --dim 512 --n-layers 12")
