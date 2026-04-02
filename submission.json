@@ -1,7 +1,10 @@
 {
   "author": "Elar Wei",
   "github": "Elarwei001",
-  "val_bpb": 1.0938,
+  "val_bpb": 1.0946,
+  "val_bpb_seed42": 1.0938,
+  "val_bpb_seed1337": 1.0953,
+  "num_seeds": 2,
   "pre_ttt_bpb": 1.361,
   "artifact_size_mb": 15.5,
   "training_time_minutes": 8,

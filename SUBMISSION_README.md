@@ -2,7 +2,7 @@
 
 **Author:** Elar Wei ([@Elarwei001](https://github.com/Elarwei001))
 
-**val_bpb:** 1.0938 (single seed)
+**val_bpb:** 1.0946 (mean of 2 seeds: 1.0938, 1.0953)
 
 **Artifact size:** ~15.5 MB (compressed with zlib)
 
@@ -15,7 +15,9 @@
 | Metric | Value |
 |--------|-------|
 | Pre-TTT val_bpb | 1.361 |
-| Post-TTT val_bpb | **1.0938** |
+| Post-TTT val_bpb (seed=42) | 1.0938 |
+| Post-TTT val_bpb (seed=1337) | 1.0953 |
+| **Mean Post-TTT val_bpb** | **1.0946** |
 | TTT Improvement | -19.6% |
 | Model Size | ~15.5 MB |
 | Training Time | ~8 min |
