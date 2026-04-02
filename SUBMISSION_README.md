@@ -144,12 +144,13 @@ We haven't yet tried these techniques from top submissions:
 
 ## Development Process
 
-This submission was developed iteratively over 3 days:
+This submission was developed iteratively over 5 days:
 
-1. **Day 1:** Baseline with BPE tokenizer, QAT quantization → 1.40 BPB
-2. **Day 2:** Added XSA → 1.44 BPB (pre-TTT)
-3. **Day 3:** Added LoRA TTT → 1.09 BPB (but 21MB, over limit)
-4. **Day 4:** Reduced dim 512→416 for size compliance → **1.1070 BPB** ✅
+1. **Day 1:** Byte-level tokenizer baseline → 4.17 BPB
+2. **Day 2:** Switched to BPE-8192 tokenizer → 1.40 BPB (-66%! 🔥)
+3. **Day 3:** Added XSA → 1.44 BPB (pre-TTT)
+4. **Day 4:** Added LoRA TTT → 1.09 BPB (but 21MB, over limit)
+5. **Day 5:** Reduced dim 512→416 for size compliance → **1.1070 BPB** ✅
 
 ---
 
