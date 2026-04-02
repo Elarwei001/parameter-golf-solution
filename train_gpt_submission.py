@@ -67,8 +67,9 @@ def quantize_model_for_save(model, bits=6):
     timeout=900,  # 15 min max (need 10 min for competition)
 )
 def train_and_eval(
+    seed: int = 42,
     steps: int = 5000,
-    dim: int = 512,
+    dim: int = 416,  # Reduced from 512 to fit 16MB limit
     n_layers: int = 11,  # 11 layers like top submissions
     n_heads: int = 8,
     n_kv_heads: int = 4,
@@ -111,10 +112,15 @@ def train_and_eval(
     VOCAB_SIZE = 8192
     DATA_DIR = "/data/datasets/fineweb10B_sp8192"
     
+    # Set random seed for reproducibility
+    import torch
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
     if is_main:
         print("="*70)
         print("XSA + LoRA TTT + QAT (Submission Ready)")
-        print(f"Config: dim={dim}, layers={n_layers}, steps={steps}")
+        print(f"Config: dim={dim}, layers={n_layers}, steps={steps}, seed={seed}")
         print(f"GPUs: {world_size}")
         print("="*70)
     
@@ -666,10 +672,10 @@ def train_and_eval(
 
 
 @app.local_entrypoint()
-def main():
+def main(seed: int = 42):
     print("XSA + LoRA TTT + QAT - Submission Ready")
-    print("Running on 8×H100...")
-    result = train_and_eval.remote()
+    print(f"Running on 8×H100 with seed={seed}...")
+    result = train_and_eval.remote(seed=seed)
     if result:
         print(f"\n🏁 Final BPB: {result['post_ttt_bpb']:.4f}")
         print(f"📦 Size: {result['model_size_mb']:.2f} MB")
