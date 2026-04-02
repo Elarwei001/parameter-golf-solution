@@ -1,4 +1,4 @@
-# Submission: XSA + LoRA TTT (val_bpb=1.0938)
+# Submission: XSA + LoRA TTT (val_bpb=1.1070)
 
 **Author:** Elar Wei ([@Elarwei001](https://github.com/Elarwei001))
 
