@@ -77,7 +77,7 @@ We tried many techniques before arriving at this submission. Here's what we lear
 |-----------|------------|-------|
 | **BPE-8192 tokenizer** | -35% | Huge improvement over byte-level |
 | **XSA (Exclusive Self Attention)** | -2.6% | Removes self-similarity bias |
-| **LoRA TTT** | -19.6% | The biggest single improvement |
+| **LoRA TTT** | -27.1% | The biggest single improvement |
 | **QAT (int6)** | ~0% loss | Enables 16MB compliance |
 | **LeakyReLU(0.5)²** | slight | Better than ReLU² |
 | **More layers (11→12)** | slight | Diminishing returns |
@@ -89,14 +89,15 @@ We tried many techniques before arriving at this submission. Here's what we lear
 | **Small dim + Whitening** | +15% worse | Training needs larger space to explore |
 | **dim=128 with 14 layers** | +15% worse | Can't compensate for small embedding |
 
-### 📊 Embedding Space Analysis
+### 📊 Size Optimization Journey
 
-We discovered an interesting phenomenon: **training collapses embedding space efficiency**.
+We initially used dim=512 (30M params) which achieved 1.09 BPB but resulted in 21MB compressed—exceeding the 16MB limit.
 
-- **Before training:** Participation Ratio = 482/512 (94% efficient)
-- **After training:** Participation Ratio = 104/512 (20% efficient)
+After analysis, we reduced dim to 416 (20.5M params), achieving:
+- **14.4 MB** compressed size (within limit)
+- **1.1070 BPB** (slight regression from 1.09)
 
-This means ~80% of dimensions become "dead" after training. However, directly using smaller dimensions doesn't work—the model needs the larger space during training to "explore."
+The tradeoff: ~1% worse BPB for 16MB compliance.
 
 ---
 
@@ -147,7 +148,8 @@ This submission was developed iteratively over 3 days:
 
 1. **Day 1:** Baseline with BPE tokenizer, QAT quantization → 1.40 BPB
 2. **Day 2:** Added XSA → 1.44 BPB (pre-TTT)
-3. **Day 3:** Added LoRA TTT → **1.09 BPB** 🎉
+3. **Day 3:** Added LoRA TTT → 1.09 BPB (but 21MB, over limit)
+4. **Day 4:** Reduced dim 512→416 for size compliance → **1.1070 BPB** ✅
 
 ---
 
