@@ -17,7 +17,7 @@
 | Pre-TTT val_bpb | 1.519 |
 | **Post-TTT val_bpb** | **1.1070** |
 | TTT Improvement | -27.1% |
-| Model Size | 14.4 MB |
+| Model Size (compressed) | 14.4 MB |
 | Training Time | ~8 min |
 | TTT Eval Time | ~2 min |
 | Total Time | ~10 min |
@@ -35,7 +35,7 @@
 - RMSNorm, RoPE positional encoding
 - Tied embeddings
 - Vocabulary: BPE-8192 (8,192 tokens)
-- ~20.5M parameters
+- ~20.5M parameters (14.4 MB compressed with int8 quantization + zlib)
 
 ### Training
 
