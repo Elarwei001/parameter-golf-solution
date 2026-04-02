@@ -69,7 +69,7 @@ def quantize_model_for_save(model, bits=6):
 def train_and_eval(
     seed: int = 42,
     steps: int = 5000,
-    dim: int = 512,
+    dim: int = 416,  # Reduced from 512 to fit 16MB limit
     n_layers: int = 11,  # 11 layers like top submissions
     n_heads: int = 8,
     n_kv_heads: int = 4,

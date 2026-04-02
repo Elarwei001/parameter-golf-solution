@@ -2,9 +2,9 @@
 
 **Author:** Elar Wei ([@Elarwei001](https://github.com/Elarwei001))
 
-**val_bpb:** 1.0946 (mean of 2 seeds: 1.0938, 1.0953)
+**val_bpb:** 1.1070
 
-**Artifact size:** ~15.5 MB (compressed with zlib)
+**Artifact size:** 14.4 MB (compressed with zlib)
 
 **Training time:** ~8 minutes on 8×H100
 
@@ -14,12 +14,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Pre-TTT val_bpb | 1.361 |
-| Post-TTT val_bpb (seed=42) | 1.0938 |
-| Post-TTT val_bpb (seed=1337) | 1.0953 |
-| **Mean Post-TTT val_bpb** | **1.0946** |
-| TTT Improvement | -19.6% |
-| Model Size | ~15.5 MB |
+| Pre-TTT val_bpb | 1.519 |
+| **Post-TTT val_bpb** | **1.1070** |
+| TTT Improvement | -27.1% |
+| Model Size | 14.4 MB |
 | Training Time | ~8 min |
 | TTT Eval Time | ~2 min |
 | Total Time | ~10 min |
@@ -30,14 +28,14 @@
 
 ### Architecture
 
-- **11 layers**, d_model=512, 8 attention heads, 4 KV heads (GQA)
+- **11 layers**, d_model=416, 8 attention heads, 4 KV heads (GQA)
 - **3× MLP expansion** with LeakyReLU(0.5)² activation
 - **XSA (Exclusive Self Attention)** on all layers
 - **Sliding window attention** (window_size=192)
 - RMSNorm, RoPE positional encoding
 - Tied embeddings
 - Vocabulary: BPE-8192 (8,192 tokens)
-- ~38M parameters
+- ~20.5M parameters
 
 ### Training
 
