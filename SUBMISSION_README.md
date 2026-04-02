@@ -149,8 +149,6 @@ This submission was developed iteratively over 3 days:
 2. **Day 2:** Added XSA → 1.44 BPB (pre-TTT)
 3. **Day 3:** Added LoRA TTT → **1.09 BPB** 🎉
 
-Key debugging insight: We initially reported 0.986 BPB due to a bug in `BYTES_PER_TOKEN` calculation (hardcoded 4.0 instead of actual 3.67). After correction: **1.0938 BPB**.
-
 ---
 
 ## License
