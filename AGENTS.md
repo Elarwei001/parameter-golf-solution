@@ -30,24 +30,42 @@ Example: `feat: Add MHC residual coefficient analysis`
 
 ## Experiment Tracking
 
-- Log all experiments in `EXPERIMENTS.md`
-- Include: date, hypothesis, results, conclusions
-- Save training logs as `train_<experiment>.log`
-- Save visualizations as PNG (and optionally SVG)
+**IMPORTANT**: After every experiment, record results and insights in:
+`docs/experiments/EXPERIMENTS.md`
+
+Use **append-only** format — never edit or delete existing entries. This preserves full history.
+
+Each entry should include:
+- Date
+- Experiment name/ID
+- Hypothesis
+- Configuration (model size, hyperparams)
+- Results (BPB, loss, key metrics)
+- Conclusions/insights
+- Link to code/logs if applicable
+
+Visualization files go to `results/figures/`, logs to `results/logs/`.
 
 ## File Organization
 
 ```
 parameter-golf-solution/
-├── AGENTS.md              # This file
-├── README.md              # Project overview
-├── EXPERIMENTS.md         # Experiment log
-├── docs/                  # Detailed analyses
-│   ├── *.md               # Analysis documents
-│   └── *.py               # Visualization scripts
-├── models/                # Model implementations
-├── modal_*.py             # Modal cloud training scripts
-└── *.png                  # Generated figures
+├── AGENTS.md                   # This file
+├── README.md                   # Project overview
+├── scripts/
+│   ├── modal/                  # Modal cloud training scripts
+│   └── local/                  # Local test scripts
+├── models/                     # Model implementations
+├── docs/
+│   ├── experiments/            # Experiment logs
+│   │   ├── EXPERIMENTS.md      # ⭐ Main experiment log (append-only)
+│   │   ├── MHC_ANALYSIS.md     # mHC deep-dive
+│   │   └── TODO.md             # Ideas to try
+│   ├── analysis/               # Deep analysis docs
+│   └── techniques/             # Tech notes (01-07)
+└── results/
+    ├── figures/                # All images (PNG/SVG)
+    └── logs/                   # JSON logs, metrics
 ```
 
 ## Modal Runs
