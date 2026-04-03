@@ -21,7 +21,10 @@ Study how learned α/β residual coefficients distribute across layers in models
 
 ```python
 # Standard residual: x + sublayer(x)
-# MHC residual:      α * sublayer(x) + β * x
+# MHC residual:      α * x + β * sublayer(x)
+#                    ^       ^
+#                    |       +-- sublayer output weight
+#                    +---------- residual input weight
 
 # Each layer learns 4 parameters:
 # - α_attn, β_attn: Attention sublayer
@@ -59,12 +62,12 @@ Study how learned α/β residual coefficients distribute across layers in models
 
 ### Layer Group Analysis
 
-| Layer Group | α_attn | β_attn | α_mlp | β_mlp | Characteristics |
-|-------------|--------|--------|-------|-------|-----------------|
-| **Shallow (0-4)** | 1.045 | 0.505 | 1.037 | 0.739 | α > 1, amplify sublayer output |
+| Layer Group | α (residual) | β (sublayer) | α_mlp | β_mlp | Characteristics |
+|-------------|--------------|--------------|-------|-------|-----------------|
+| **Shallow (0-4)** | 1.045 | 0.505 | 1.037 | 0.739 | High α (preserve input), low β_attn |
 | **Mid-Shallow (5-9)** | 0.973 | 0.634 | 0.967 | 0.798 | α ≈ 1, β_mlp peaks |
 | **Mid-Deep (10-14)** | 0.943 | 0.759 | 0.944 | 0.700 | Gradual decay |
-| **Deep (15-19)** | 0.884 | **0.843** | 0.902 | 0.636 | α < 1, β_attn highest |
+| **Deep (15-19)** | 0.884 | **0.843** | 0.902 | 0.636 | Low α (less residual), high β_attn |
 
 ### Peak Positions
 
@@ -77,31 +80,31 @@ Study how learned α/β residual coefficients distribute across layers in models
 
 ## Key Findings
 
-### 1. α Decreases from Shallow to Deep
+### 1. α (Residual Weight) Decreases from Shallow to Deep
 
 ```
 Shallow α ≈ 1.04  →  Deep α ≈ 0.89
 ```
 
-**Interpretation**: Shallow layers need to "amplify" sublayer output to build features; deep layers need to "suppress" to prevent overfitting.
+**Interpretation**: Shallow layers preserve more of the original input; deep layers reduce residual contribution, allowing more transformation.
 
-### 2. β_attn Peaks at Deepest Layer
+### 2. β_attn (Attention Output) Peaks at Deepest Layer
 
 ```
 Layer 0:  β_attn = 0.278
 Layer 19: β_attn = 1.049  ← exceeds 1!
 ```
 
-**Interpretation**: Deep attention is prone to instability and needs stronger residual connections to "anchor" the original input.
+**Interpretation**: Deep attention outputs are highly valuable and get amplified (β > 1); shallow attention is dampened as the model is still building representations.
 
-### 3. β_mlp Peaks in Shallow Layers
+### 3. β_mlp (MLP Output) Peaks in Shallow Layers
 
 ```
 Layer 4:  β_mlp = 0.864 ← peak
 Layer 19: β_mlp = 0.627
 ```
 
-**Interpretation**: MLP performs primary feature transformation in shallow layers, requiring strong residual to preserve information; deep MLP is more for fine-tuning.
+**Interpretation**: Shallow MLP performs heavy feature extraction and its output is emphasized; deep MLP output is dampened for fine-tuning.
 
 ### 4. α + β Total Varies by Depth
 
