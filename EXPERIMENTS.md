@@ -323,6 +323,35 @@ Layer 10: α_attn=1.142, α_mlp=0.919
 
 ---
 
+### 实验 12: 渐进式 Attention (进行中)
+
+**日期**: 2026-04-03
+
+**假设**：基于 mHC 发现，浅层 attention 权重很低 (α ≈ 0.2-0.5)，可以直接去掉
+
+**架构**：
+```
+Layer 0-2:  MLP only (无 Attention)
+Layer 3-10: Full Attention + MLP
+```
+
+**待验证问题** ⚠️：
+1. **位置信息缺失**：RoPE 在 Attention 层注入，前 3 层无位置编码
+   - MLP 是 position-agnostic
+   - 可能需要在 Embedding 层或 MLP 层加位置编码
+   
+2. **如果效果差，改进方案**：
+   - 方案 A: 在 Embedding 层加 learnable position embedding
+   - 方案 B: 在 MLP-only 层加简单位置编码
+   - 方案 C: 用 ALiBi 风格的相对位置（不需要 attention）
+
+**实验状态**: 🔄 进行中 (Session: brisk-forest)
+
+**相关文件**：
+- `/tmp/parameter-golf-solution/modal_progressive_attn.py`
+
+---
+
 ### 实验 10: 数据质量过滤
 
 **日期**: 2026-04-03
