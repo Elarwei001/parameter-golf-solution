@@ -52,8 +52,13 @@ Visualization files go to `results/figures/`, logs to `results/logs/`.
 parameter-golf-solution/
 ├── AGENTS.md                   # This file
 ├── README.md                   # Project overview
+├── BASELINE_CONFIG.md          # ⭐ Standard experiment config (must read!)
 ├── scripts/
 │   ├── modal/                  # Modal cloud training scripts
+│   │   ├── modal_mhc_v2_deep.py    # Baseline (mHC v2)
+│   │   ├── modal_alternating_attn.py # Alternating Attention
+│   │   ├── modal_ple_v2.py         # PLE experiment
+│   │   └── ...                     # Other experiments
 │   └── local/                  # Local test scripts
 ├── models/                     # Model implementations
 ├── docs/
@@ -81,7 +86,7 @@ parameter-golf-solution/
 
 **Always copy boilerplate from existing working scripts** — don't write from scratch!
 
-Reference script: `modal_mhc_v2_deep.py`
+Reference script: `scripts/modal/modal_mhc_v2_deep.py`
 
 Copy these sections verbatim:
 1. **Image definition** — use exact torch version (`torch==2.5.1`)

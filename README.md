@@ -95,10 +95,13 @@ GPT with QAT
 parameter-golf-solution/
 ├── scripts/
 │   ├── modal/              # Modal 云端训练脚本
-│   │   ├── modal_mhc_v2.py # mHC 实验 (当前核心)
-│   │   ├── modal_qat.py    # QAT 量化训练
-│   │   └── modal_xsa_ttt.py# XSA + TTT
+│   │   ├── modal_mhc_v2_deep.py    # mHC 实验 (baseline)
+│   │   ├── modal_alternating_attn.py # Alternating Attention
+│   │   ├── modal_ple_v2.py         # PLE 实验
+│   │   ├── modal_qat.py            # QAT 量化训练
+│   │   └── modal_xsa_ttt.py        # XSA + TTT
 │   └── local/              # 本地测试脚本
+├── BASELINE_CONFIG.md      # 标准实验配置 (必读)
 ├── models/                 # 模型定义
 ├── docs/                   # 文档
 │   ├── experiments/        # 实验记录
@@ -120,12 +123,17 @@ python train_gpt.py --steps 100 --dataset tinyshakespeare
 
 ### Modal Cloud (H100)
 ```bash
-# BPE-8192 training
-modal run modal_bpe8k.py::train_bpe8k --steps 5000
+# Baseline (mHC v2, 20层)
+modal run --detach scripts/modal/modal_mhc_v2_deep.py
 
-# QAT training
-modal run modal_qat.py::train_qat --steps 5000 --warmup-steps 500
+# Alternating Attention
+modal run --detach scripts/modal/modal_alternating_attn.py
+
+# Alternating Attention + mHC
+modal run --detach scripts/modal/modal_alternating_attn.py -- --mhc
 ```
+
+**Note**: Always use `--detach` to prevent task termination if CLI disconnects.
 
 ---
 
