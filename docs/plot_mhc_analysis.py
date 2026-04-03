@@ -49,16 +49,16 @@ def plot_mhc_analysis():
     ax1.fill_between(layers, 0.8, 1.2, alpha=0.1, color='gray')
     ax1.set_xlabel('Layer')
     ax1.set_ylabel('α value')
-    ax1.set_title('α (Sublayer Output Weight)')
+    ax1.set_title('α (Residual Input Weight)')
     ax1.legend(loc='upper right')
     ax1.set_xlim(-0.5, 19.5)
     ax1.set_ylim(0.75, 1.15)
     ax1.grid(True, alpha=0.3)
     
     # Annotations
-    ax1.annotate('Shallow: α > 1\n(amplify sublayer)', xy=(2, 1.08), fontsize=9, 
+    ax1.annotate('Shallow: α > 1\n(strong residual)', xy=(2, 1.08), fontsize=9, 
                  ha='center', color='#2196F3')
-    ax1.annotate('Deep: α < 1\n(suppress sublayer)', xy=(17, 0.88), fontsize=9, 
+    ax1.annotate('Deep: α < 1\n(weak residual)', xy=(17, 0.88), fontsize=9, 
                  ha='center', color='#2196F3')
     
     # ===== Plot 2: β values =====
@@ -79,7 +79,7 @@ def plot_mhc_analysis():
     
     ax2.set_xlabel('Layer')
     ax2.set_ylabel('β value')
-    ax2.set_title('β (Residual Input Weight)')
+    ax2.set_title('β (Sublayer Output Weight)')
     ax2.legend(loc='upper left')
     ax2.set_xlim(-0.5, 19.5)
     ax2.set_ylim(0.2, 1.15)
