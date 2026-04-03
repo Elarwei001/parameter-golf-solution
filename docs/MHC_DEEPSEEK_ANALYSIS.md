@@ -14,7 +14,7 @@ Study how learned α/β residual coefficients distribute across layers in models
 | Dimension | 384 | 384 |
 | Parameters | 18.5M | 32.85M |
 | Training Steps | 5000 | 5000 |
-| Hardware | Modal H100 | Modal H100 |
+| Hardware | Modal A100-40GB | Modal A100-40GB |
 | Training Time | ~15 min | ~31 min |
 
 ### MHC Residual Structure
