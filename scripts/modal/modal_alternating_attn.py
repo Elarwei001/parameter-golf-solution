@@ -53,7 +53,7 @@ image = (
 data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=True)
 
 
-# 从 20 层实验学到的 mHC 参数
+# mHC parameters learned from 20-layer experiment
 MHC_PARAMS_20L = [
     {"alpha_attn": 1.120, "beta_attn": 0.278, "alpha_mlp": 1.096, "beta_mlp": 0.559},  # Layer 0
     {"alpha_attn": 1.066, "beta_attn": 0.383, "alpha_mlp": 1.051, "beta_mlp": 0.694},  # Layer 1
@@ -118,8 +118,9 @@ def train_alternating(
     
     mode_str = "mHC" if use_mhc else "Vanilla"
     print("="*70)
-    print(f"Alternating Attention Experiment: {n_layers} layers, {mode_str}")
-    print(f"Odd layers: Local (window={local_window}), Even layers + last: Global")
+    print(f"Alternating Attention Experiment")
+    print(f"  Layers: {n_layers}, dim: {dim}, mode: {mode_str}")
+    print(f"  Odd layers: Local (window={local_window}), Even layers + last: Global")
     print("="*70)
     
     # Load data
