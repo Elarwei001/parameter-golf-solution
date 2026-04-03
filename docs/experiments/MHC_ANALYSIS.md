@@ -206,16 +206,16 @@ Across all three model depths, **β_attn peaks at approximately 85-95% depth**:
 ## Visualizations
 
 ### 32-Layer Model Analysis (with Layer 27 Anomaly)
-![MHC 32L Analysis](../../results/figures/mhc_deepseek_32L_analysis.png)
+![MHC 32L Analysis](/results/figures/mhc_deepseek_32L_analysis.png)
 
 ### 20-Layer Model Complete Analysis
-![MHC 20L Analysis](../../results/figures/mhc_deepseek_20L_analysis_v2.png)
+![MHC 20L Analysis](/results/figures/mhc_deepseek_20L_analysis_v2.png)
 
 ### 11L vs 20L Comparison
-![MHC Comparison](../../results/figures/mhc_11L_vs_20L_comparison.png)
+![MHC Comparison](/results/figures/mhc_11L_vs_20L_comparison.png)
 
 ### Heatmap View
-![MHC Heatmap](../../results/figures/mhc_heatmap.png)
+![MHC Heatmap](/results/figures/mhc_heatmap.png)
 
 To regenerate: `python scripts/local/plot_mhc_analysis.py`
 
