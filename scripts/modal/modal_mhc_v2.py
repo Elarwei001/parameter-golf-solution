@@ -260,17 +260,34 @@ def train_mhc_v2(
         batch = np.stack([data[i:i+seq_len+1] for i in starts])
         return torch.from_numpy(batch.astype(np.int64)).to(device)
     
-    # 记录 α/β 变化
-    mhc_history = []
+    # 过程指标记录
+    metrics_history = {
+        'config': {
+            'seed': seed,
+            'dim': dim,
+            'n_layers': n_layers,
+            'n_heads': n_heads,
+            'batch_size': batch_size,
+            'seq_len': seq_len,
+            'lr': lr,
+            'steps': steps,
+        },
+        'train_loss': [],      # 每步
+        'val_loss': [],        # 每 500 步
+        'mhc_params': [],      # 每 100 步
+        'grad_norms': [],      # 每 500 步
+    }
+    
+    LOG_EVERY = 500
+    MHC_LOG_EVERY = 100
     
     # 训练
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.1)
     
     start_time = time.time()
-    LOG_EVERY = 500
     
     print(f"\n🚀 开始训练 ({steps} steps)...")
-    print(f"   每 {log_alpha_every} 步记录 α/β 值\n")
+    print(f"   过程指标: train_loss(每步), val_loss(每{LOG_EVERY}步), α/β(每{MHC_LOG_EVERY}步), grad_norm(每{LOG_EVERY}步)\n")
     
     for step in range(1, steps + 1):
         model.train()
@@ -292,19 +309,53 @@ def train_mhc_v2(
         
         opt.zero_grad()
         loss.backward()
+        
+        # 记录每层梯度范数 (每 500 步)
+        if step % LOG_EVERY == 0:
+            layer_grad_norms = []
+            for i, layer in enumerate(model.layers):
+                grad_norm = 0.0
+                for p in layer.parameters():
+                    if p.grad is not None:
+                        grad_norm += p.grad.norm().item() ** 2
+                layer_grad_norms.append(math.sqrt(grad_norm))
+            metrics_history['grad_norms'].append({
+                'step': step,
+                'norms': layer_grad_norms
+            })
+        
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         
-        if step % log_alpha_every == 0:
+        # 记录 train loss (每步)
+        metrics_history['train_loss'].append({
+            'step': step,
+            'loss': loss.item(),
+            'lr': lr * lr_mult
+        })
+        
+        # 记录 α/β 值 (每 100 步)
+        if step % MHC_LOG_EVERY == 0:
             mhc_params_current = model.get_all_mhc_params()
-            mhc_history.append({
+            metrics_history['mhc_params'].append({
                 'step': step,
                 'params': mhc_params_current
             })
         
+        # 记录 val loss + 打印进度 (每 500 步)
         if step % LOG_EVERY == 0:
+            model.eval()
+            with torch.no_grad():
+                val_batch = get_batch(val_data)
+                val_loss = model.loss(val_batch).item()
+            metrics_history['val_loss'].append({
+                'step': step,
+                'loss': val_loss
+            })
+            model.train()
+            
             elapsed = time.time() - start_time
-            print(f"Step {step}/{steps} | Loss {loss.item():.4f} | "
+            print(f"Step {step}/{steps} | Train {loss.item():.4f} | Val {val_loss:.4f} | "
                   f"LR {lr * lr_mult:.2e} | Time {elapsed:.0f}s")
     
     train_time = time.time() - start_time
@@ -381,28 +432,43 @@ def train_mhc_v2(
     print(f"{'='*70}")
     
     # 保存
+    import json
     checkpoint_dir = "/data/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
-    checkpoint_path = os.path.join(checkpoint_dir, f"mhc_v2_bpb{bpb:.4f}.pt")
+    # 保存模型 checkpoint
+    checkpoint_path = os.path.join(checkpoint_dir, f"mhc_v2_{n_layers}L_seed{seed}_bpb{bpb:.4f}.pt")
     torch.save({
         'state_dict': model.state_dict(),
-        'config': {'dim': dim, 'n_layers': n_layers},
+        'config': {'dim': dim, 'n_layers': n_layers, 'seed': seed},
         'mhc_params': final_params,
-        'mhc_history': mhc_history,
         'bpb': bpb,
     }, checkpoint_path)
     
+    # 保存过程指标为 JSON
+    metrics_history['final_results'] = {
+        'bpb': bpb,
+        'val_loss': avg_loss,
+        'train_time_sec': train_time,
+        'n_params': n_params,
+        'final_mhc_params': final_params,
+    }
+    metrics_path = os.path.join(checkpoint_dir, f"metrics_{n_layers}L_seed{seed}.json")
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics_history, f, indent=2)
+    
     data_volume.commit()
     
-    print(f"\n💾 保存: {checkpoint_path}")
+    print(f"\n💾 保存:")
+    print(f"   模型: {checkpoint_path}")
+    print(f"   指标: {metrics_path}")
     
     return {
         'bpb': bpb,
         'loss': avg_loss,
         'n_params': n_params,
         'final_mhc_params': final_params,
-        'mhc_history': mhc_history,
+        'metrics_path': metrics_path,
     }
 
 

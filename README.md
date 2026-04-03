@@ -41,12 +41,14 @@ Vocab 32K  → Embedding uses 6 MB (too much!)
 
 ## 📊 Experiment Details
 
-See [EXPERIMENTS.md](EXPERIMENTS.md) for full experiment logs.
+See [docs/experiments/EXPERIMENTS.md](docs/experiments/EXPERIMENTS.md) for full experiment logs.
 
-### 🆕 MHC DeepSeek Residual Study
-See [docs/MHC_DEEPSEEK_ANALYSIS.md](docs/MHC_DEEPSEEK_ANALYSIS.md) for our study on learnable layer-wise residual coefficients inspired by DeepSeek-V3.
+### 🆕 mHC DeepSeek Residual Study
+See [docs/experiments/MHC_ANALYSIS.md](docs/experiments/MHC_ANALYSIS.md) for our study on learnable layer-wise residual coefficients inspired by DeepSeek-V3.
 
-![MHC Heatmap](mhc_heatmap.png)
+**新发现**: 异常层规律 — 11L/20L/32L 模型均在 ~90% 深度出现 β 峰值
+
+![MHC Heatmap](results/figures/mhc_heatmap.png)
 
 ### Activation Functions
 | Function | BPB | Winner |
@@ -91,12 +93,20 @@ GPT with QAT
 
 ```
 parameter-golf-solution/
-├── train_gpt.py              # Basic training script
-├── modal_bpe.py              # BPE-1024 Modal training
-├── modal_bpe8k.py            # BPE-8192 Modal training
-├── modal_qat.py              # ⭐ QAT (Ternary) training
-├── EXPERIMENTS.md            # Detailed experiment logs
-└── SYSTEMATIC_EXPERIMENTS.md # Experiment methodology
+├── scripts/
+│   ├── modal/              # Modal 云端训练脚本
+│   │   ├── modal_mhc_v2.py # mHC 实验 (当前核心)
+│   │   ├── modal_qat.py    # QAT 量化训练
+│   │   └── modal_xsa_ttt.py# XSA + TTT
+│   └── local/              # 本地测试脚本
+├── models/                 # 模型定义
+├── docs/                   # 文档
+│   ├── experiments/        # 实验记录
+│   ├── analysis/           # 深度分析
+│   └── techniques/         # 技术笔记
+└── results/                # 实验结果
+    ├── figures/            # 图表
+    └── logs/               # JSON 日志
 ```
 
 ---
