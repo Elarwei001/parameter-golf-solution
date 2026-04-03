@@ -461,33 +461,38 @@ def train_alternating(
 
 
 @app.local_entrypoint()
-def main():
-    import sys
-    import argparse
+def main(
+    mhc: bool = False,
+    dim: int = 384,
+    n_layers: int = 20,
+    local_window: int = 128,
+    steps: int = 5000,
+    resume: str = None,
+):
+    """Run Alternating Attention experiment.
     
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mhc", action="store_true", help="Use learned mHC parameters")
-    parser.add_argument("--dim", type=int, default=384, help="Model dimension (default: 384)")
-    parser.add_argument("--n_layers", type=int, default=20, help="Number of layers (default: 20)")
-    parser.add_argument("--local_window", type=int, default=128, help="Local attention window (default: 128)")
-    parser.add_argument("--steps", type=int, default=5000, help="Training steps (default: 5000)")
-    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
-    args, _ = parser.parse_known_args()  # Ignore unknown args from Modal
-    
-    mode = "mHC" if args.mhc else "Vanilla"
+    Args:
+        mhc: Use learned mHC parameters
+        dim: Model dimension (default: 384)
+        n_layers: Number of layers (default: 20)
+        local_window: Local attention window (default: 128)
+        steps: Training steps (default: 5000)
+        resume: Path to checkpoint to resume from
+    """
+    mode = "mHC" if mhc else "Vanilla"
     print(f"\n[START] Alternating Attention Experiment")
-    print(f"   Mode: {mode}, dim={args.dim}, layers={args.n_layers}, window={args.local_window}")
+    print(f"   Mode: {mode}, dim={dim}, layers={n_layers}, window={local_window}")
     
     result = train_alternating.remote(
-        n_layers=args.n_layers,
-        dim=args.dim,
+        n_layers=n_layers,
+        dim=dim,
         n_heads=8,
         n_kv_heads=4,
-        local_window=args.local_window,
-        use_mhc=args.mhc,
+        local_window=local_window,
+        use_mhc=mhc,
         seed=42,
-        steps=args.steps,
-        resume_from=args.resume,
+        steps=steps,
+        resume_from=resume,
     )
     
     print(f"\n[FINAL] BPB: {result['val_bpb']:.4f}")
