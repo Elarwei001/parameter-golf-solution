@@ -232,6 +232,9 @@ def train_alternating(
                 window_mask = (rows - cols) > self.local_window
                 mask = causal_mask | window_mask
             
+            # NOTE: We compute full scores then mask, rather than sparse computation.
+            # For seq_len=256, this is efficient enough. For longer sequences,
+            # consider FlashAttention or xformers for true sparse computation.
             scores = scores.masked_fill(mask, float('-inf'))
             attn = F.softmax(scores, dim=-1)
             out = torch.matmul(attn, v)
