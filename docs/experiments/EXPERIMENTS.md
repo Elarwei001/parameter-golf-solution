@@ -665,3 +665,33 @@ parameter-golf-solution/
 ---
 
 *最后更新: 2026-04-03*
+
+---
+
+## 2026-04-03: PLE (Per-Layer Embedding) 实验
+
+**假设**：每层注入 token embedding 信号，让深层也能"回看"原始 token 身份
+
+**配置**：
+- 基于 BASELINE_CONFIG (20层, dim=384, 500M tokens, seq_len=256)
+- PLE dim: 64
+- PLE mode: shared (所有层共享一个 projection)
+- PLE 开销: 0.55M params (1.8%)
+
+**结果**：
+
+| 指标 | PLE | Baseline | 差异 |
+|------|-----|----------|------|
+| Val Loss | 3.8958 | 3.8222 | +1.9% |
+| Val BPB | 5.6204 | 1.5025 | +274% ❌ |
+| 参数量 | 30.25M | 32.85M | -7.9% |
+
+**结论**：PLE 在此配置下完全失败，BPB 差了近 3 倍。
+
+**可能原因**：
+1. PLE 干扰了残差流 — 每层注入 embedding 信号打乱特征传播
+2. 和 weight tying 冲突 — 输出层复用主 embedding 权重，额外 PLE 信号造成混淆
+3. 简单加法注入不够 — 可能需要门控机制
+
+**脚本**：`modal_ple_v2.py`
+

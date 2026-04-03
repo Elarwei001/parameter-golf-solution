@@ -73,6 +73,36 @@ parameter-golf-solution/
 - Use descriptive app names: `mhc-v2-deepseek-20L`
 - Don't poll training logs (expensive!) — just wait for completion
 - Save outputs to Modal volumes when needed
+- **Always use `modal run --detach`** — prevents task termination if local CLI disconnects
+  - Check progress with: `modal app logs <app-id>`
+  - App ID is shown in the "View run at" URL (e.g., `ap-xxxxxxxx`)
+
+### Writing New Modal Scripts
+
+**Always copy boilerplate from existing working scripts** — don't write from scratch!
+
+Reference script: `modal_mhc_v2_deep.py`
+
+Copy these sections verbatim:
+1. **Image definition** — use exact torch version (`torch==2.5.1`)
+2. **Volume name** — `parameter-golf-data` (not `training-data`)
+3. **Data paths** — `fineweb_train_000000.bin` (6 digits, not 3)
+4. **`get_batch()` function** — includes `.long()` conversion for targets
+5. **HEADER_SIZE** — `256 * 4` bytes to skip
+
+Only modify the model architecture. This avoids:
+- CUDA version incompatibility
+- FileNotFoundError from wrong paths
+- dtype errors (Int vs Long)
+
+### Experiment Discipline
+
+**Before running any experiment:**
+1. Read `BASELINE_CONFIG.md` — contains the fixed config
+2. Only modify model architecture — keep data/training config identical
+3. Compare against baseline BPB: **1.5025** (mHC v2, 20L)
+
+This ensures apples-to-apples comparison.
 
 ---
 
