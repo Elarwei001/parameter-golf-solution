@@ -8,14 +8,14 @@ Study how learned α/β residual coefficients distribute across layers in models
 
 ## Experiment Setup
 
-| Parameter | 11-Layer Model | 20-Layer Model |
-|-----------|----------------|----------------|
-| Layers | 11 | 20 |
-| Dimension | 384 | 384 |
-| Parameters | 18.5M | 32.85M |
-| Training Steps | 5000 | 5000 |
-| Hardware | Modal A100-40GB | Modal A100-40GB |
-| Training Time | ~15 min | ~31 min |
+| Parameter | 11-Layer | 20-Layer | 32-Layer |
+|-----------|----------|----------|----------|
+| Layers | 11 | 20 | 32 |
+| Dimension | 384 | 384 | 384 |
+| Parameters | 18.5M | 32.85M | 48.78M |
+| Training Steps | 5000 | 5000 | 5000 |
+| Hardware | Modal A100-40GB | Modal A100-40GB | Modal A100-40GB |
+| Training Time | ~15 min | ~31 min | ~55 min |
 
 ### MHC Residual Structure
 
@@ -114,16 +114,70 @@ Layer 19: β_mlp = 0.627
 
 ---
 
-## Comparison with 11-Layer Model
+## 32-Layer Model Results
 
-| Metric | 11-Layer | 20-Layer | Change |
-|--------|----------|----------|--------|
-| β_attn peak position | Layer 7 (64%) | Layer 19 (95%) | Shifts deeper |
-| β_mlp peak position | Layer 3 (27%) | Layer 4 (20%) | Similar |
-| Val Loss | ~4.1 | 3.82 | -7% |
-| Val BPB | ~1.6 | 1.50 | -6% |
+### Detailed Results
 
-**Observation**: As depth increases, β_attn peak shifts toward deeper layers, consistent with "deeper layers need stronger residual stability" intuition.
+| Layer | α_attn | β_attn | α_mlp | β_mlp | α+β(attn) | α+β(mlp) |
+|-------|--------|--------|-------|-------|-----------|----------|
+| 0 | 1.224 | 0.180 | 1.162 | 0.475 | 1.404 | 1.637 |
+| 1 | 1.128 | 0.274 | 1.087 | 0.622 | 1.402 | 1.709 |
+| 2 | 1.080 | 0.294 | 1.047 | 0.681 | 1.374 | 1.728 |
+| 3 | 1.043 | 0.312 | 1.023 | 0.725 | 1.355 | 1.748 |
+| 4 | 1.025 | 0.415 | 1.016 | 0.776 | 1.439 | 1.792 |
+| ... | ... | ... | ... | ... | ... | ... |
+| 25 | 0.865 | 0.867 | 0.872 | 0.634 | 1.732 | 1.506 |
+| 26 | 0.856 | 0.970 | 0.868 | 0.617 | 1.826 | 1.485 |
+| **27** | **0.848** | **1.390** | 0.867 | 0.603 | **2.238** | 1.470 |
+| 28 | 0.847 | 0.952 | 0.874 | 0.605 | 1.799 | 1.479 |
+| 29 | 0.850 | 0.887 | 0.879 | 0.606 | 1.737 | 1.485 |
+| 30 | 0.854 | 0.842 | 0.900 | 0.578 | 1.696 | 1.478 |
+| 31 | 0.916 | 0.867 | 0.959 | 0.619 | 1.783 | 1.578 |
+
+### Layer 27 Anomaly ⚠️
+
+Layer 27 shows a **dramatic β_attn spike** (1.390), far exceeding all other layers:
+- **Relative position**: 27/31 = **87%** depth
+- **α + β total**: 2.238 (highest in the model)
+- Surrounding layers (26, 28) are elevated but not as extreme
+
+---
+
+## Cross-Model Comparison
+
+| Metric | 11-Layer | 20-Layer | 32-Layer |
+|--------|----------|----------|----------|
+| β_attn peak layer | Layer 9 | Layer 19 | **Layer 27** |
+| Peak relative position | 9/10 = **90%** | 19/19 = **100%** | 27/31 = **87%** |
+| Peak β_attn value | ~1.05 | 1.049 | **1.390** |
+| β_mlp peak position | Layer 3 (27%) | Layer 4 (20%) | Layer 4-5 (~15%) |
+| Val BPB | ~1.6 | 1.50 | 1.42 |
+
+### 💡 Key Discovery: ~90% Depth Anomaly Pattern
+
+Across all three model depths, **β_attn peaks at approximately 85-95% depth**:
+
+| Model | Anomaly Layer | Relative Position |
+|-------|---------------|-------------------|
+| 11L | Layer 9 | 90% |
+| 20L | Layer 18-19 | 95-100% |
+| 32L | Layer 27 | 87% |
+
+**This is NOT the final layer** — it's consistently the second-to-last "phase" of the network.
+
+### Possible Explanations
+
+1. **Pre-Output Integration Layer** — The model needs a dedicated layer near the end to consolidate all features before the final output projection
+
+2. **Information Bottleneck** — At ~90% depth, the model compresses features for final prediction; attention becomes critical here
+
+3. **Weight Tying Effects** — If embedding weights are tied, gradients from output layer may create unusual dynamics in nearby layers
+
+### Validation Needed
+
+- [ ] Run with different seeds to confirm Layer 27 anomaly is stable (seed=43 experiment in progress)
+- [ ] Test 48L or 64L model to see if anomaly appears at ~Layer 41-43 or ~Layer 55-58
+- [ ] Analyze gradient flow through the anomaly layer
 
 ---
 
@@ -151,16 +205,19 @@ Layer 19: β_mlp = 0.627
 
 ## Visualizations
 
+### 32-Layer Model Analysis (with Layer 27 Anomaly)
+![MHC 32L Analysis](../../results/figures/mhc_deepseek_32L_analysis.png)
+
 ### 20-Layer Model Complete Analysis
-![MHC 20L Analysis](../mhc_deepseek_20L_analysis_v2.png)
+![MHC 20L Analysis](../../results/figures/mhc_deepseek_20L_analysis_v2.png)
 
 ### 11L vs 20L Comparison
-![MHC Comparison](../mhc_11L_vs_20L_comparison.png)
+![MHC Comparison](../../results/figures/mhc_11L_vs_20L_comparison.png)
 
 ### Heatmap View
-![MHC Heatmap](../mhc_heatmap.png)
+![MHC Heatmap](../../results/figures/mhc_heatmap.png)
 
-To regenerate: `python docs/plot_mhc_analysis.py`
+To regenerate: `python scripts/local/plot_mhc_analysis.py`
 
 ---
 
