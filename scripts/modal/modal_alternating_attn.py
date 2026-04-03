@@ -30,6 +30,9 @@ modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448
 
 # Alt-B + mHC:
 modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448 --mhc
+
+# Resume from checkpoint (continue training to 10000 steps):
+modal run --detach scripts/modal/modal_alternating_attn.py -- --steps 10000 --resume /data/checkpoints/alternating_attn/alt_Vanilla_dim384_L20_step5000.pt
 ```
 
 ## Baseline Comparison
@@ -99,6 +102,8 @@ def train_alternating(
     batch_size: int = 64,
     seq_len: int = 256,
     steps: int = 5000,
+    # Resume from checkpoint
+    resume_from: str = None,  # Path to checkpoint file to resume from
 ):
     import torch
     import torch.nn as nn
@@ -346,6 +351,17 @@ def train_alternating(
     # Training
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.1)
     
+    # Resume from checkpoint if specified
+    start_step = 0
+    if resume_from and os.path.exists(resume_from):
+        print(f"\n📂 Resuming from checkpoint: {resume_from}")
+        checkpoint = torch.load(resume_from)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_step = checkpoint['step']
+        print(f"   Resuming from step {start_step}")
+        print(f"   Previous loss: {checkpoint['loss']:.4f}")
+    
     def get_batch(split):
         data = train_tokens if split == 'train' else val_tokens
         max_start = len(data) - seq_len - 1
@@ -360,10 +376,16 @@ def train_alternating(
         progress = (step - 200) / (steps - 200)
         return 0.5 * (1 + math.cos(math.pi * progress))
     
-    print(f"\n🚀 Starting training ({steps} steps)...\n")
+    # Checkpoint directory
+    checkpoint_dir = "/data/checkpoints/alternating_attn"
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    run_name = f"alt_{mode_str}_dim{dim}_L{n_layers}"
+    
+    print(f"\n🚀 Starting training ({steps} steps)...")
+    print(f"   Checkpoints will be saved to: {checkpoint_dir}/{run_name}_*.pt\n")
     start_time = time.time()
     
-    for step in range(1, steps + 1):
+    for step in range(start_step + 1, steps + 1):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr * cosine_lr(step)
         
@@ -379,6 +401,26 @@ def train_alternating(
             elapsed = time.time() - start_time
             current_lr = optimizer.param_groups[0]['lr']
             print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {current_lr:.2e} | Time {elapsed:.0f}s")
+        
+        # Save checkpoint every 5000 steps
+        if step % 5000 == 0:
+            checkpoint_path = f"{checkpoint_dir}/{run_name}_step{step}.pt"
+            torch.save({
+                'step': step,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss.item(),
+                'config': {
+                    'dim': dim,
+                    'n_layers': n_layers,
+                    'n_heads': n_heads,
+                    'n_kv_heads': n_kv_heads,
+                    'local_window': local_window,
+                    'use_mhc': use_mhc,
+                }
+            }, checkpoint_path)
+            print(f"   💾 Checkpoint saved: {checkpoint_path}")
+            data_volume.commit()  # Persist to volume
     
     print(f"\nTraining completed: {time.time() - start_time:.0f}s")
     
@@ -425,6 +467,8 @@ def main():
     parser.add_argument("--dim", type=int, default=384, help="Model dimension (default: 384)")
     parser.add_argument("--n_layers", type=int, default=20, help="Number of layers (default: 20)")
     parser.add_argument("--local_window", type=int, default=128, help="Local attention window (default: 128)")
+    parser.add_argument("--steps", type=int, default=5000, help="Training steps (default: 5000)")
+    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
     
     mode = "mHC" if args.mhc else "Vanilla"
@@ -439,7 +483,8 @@ def main():
         local_window=args.local_window,
         use_mhc=args.mhc,
         seed=42,
-        steps=5000,
+        steps=args.steps,
+        resume_from=args.resume,
     )
     
     print(f"\n🏁 BPB: {result['val_bpb']:.4f}")
