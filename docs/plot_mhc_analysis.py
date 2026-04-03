@@ -52,6 +52,7 @@ def plot_mhc_analysis():
     ax1.set_title('α (Residual Input Weight)')
     ax1.legend(loc='upper right')
     ax1.set_xlim(-0.5, 19.5)
+    ax1.set_xticks(range(20))
     ax1.set_ylim(0.75, 1.15)
     ax1.grid(True, alpha=0.3)
     
@@ -82,6 +83,7 @@ def plot_mhc_analysis():
     ax2.set_title('β (Sublayer Output Weight)')
     ax2.legend(loc='upper left')
     ax2.set_xlim(-0.5, 19.5)
+    ax2.set_xticks(range(20))
     ax2.set_ylim(0.2, 1.15)
     ax2.grid(True, alpha=0.3)
     
@@ -109,6 +111,7 @@ def plot_mhc_analysis():
     ax3.set_title('Total Residual Weight (α + β)')
     ax3.legend(loc='upper right')
     ax3.set_xlim(-0.5, 19.5)
+    ax3.set_xticks(range(20))
     ax3.set_ylim(1.3, 2.0)
     ax3.grid(True, alpha=0.3, axis='y')
     
