@@ -256,4 +256,142 @@ parameter-golf-solution/
 
 ---
 
-*最后更新: 2026-04-01*
+### 实验 9: mHC 可学习残差权重
+
+**日期**: 2026-04-03
+
+**假设**：让每层学习自己的残差权重，可能比固定 α=1 更优
+
+**灵感来源**：DeepSeek mHC 论文 (arXiv: 2512.24880)
+
+**实现**：
+```python
+# mHC v1: x + α * layer_out (α 初始化为 1)
+self.alpha_attn = nn.Parameter(torch.ones(1))
+self.alpha_mlp = nn.Parameter(torch.ones(1))
+
+def forward(self, x):
+    x = x + self.alpha_attn * self.attn(self.ln1(x))
+    x = x + self.alpha_mlp * self.mlp(self.ln2(x))
+    return x
+```
+
+**结果**：
+
+| 方法 | BPB | vs Baseline |
+|------|-----|-------------|
+| Standard Residual | **1.5187** | - |
+| mHC v1 (learnable α) | 1.5293 | **-0.7%** ❌ |
+
+**BPB 更差了**，但学到的 α 值非常有趣！
+
+**学习到的 α 分布**：
+```
+Layer  0: α_attn=0.222, α_mlp=0.452  ← 浅层 attention 权重很低！
+Layer  1: α_attn=0.325, α_mlp=0.539
+Layer  2: α_attn=0.558, α_mlp=0.567
+Layer  3: α_attn=0.566, α_mlp=0.645
+Layer  4: α_attn=0.572, α_mlp=0.677
+Layer  5: α_attn=0.644, α_mlp=0.659
+Layer  6: α_attn=0.851, α_mlp=0.654
+Layer  7: α_attn=1.393, α_mlp=0.901  ← 深层 attention 超过 1.0！
+Layer  8: α_attn=1.039, α_mlp=0.940
+Layer  9: α_attn=1.080, α_mlp=0.978
+Layer 10: α_attn=1.142, α_mlp=0.919
+```
+
+**关键发现** 🔥：
+
+1. **浅层 Attention 不重要**：α_attn ≈ 0.2-0.5，模型认为浅层 attention 贡献不大
+2. **深层 Attention 超重要**：α_attn > 1.0，模型想要放大深层 attention
+3. **MLP 权重更稳定**：α_mlp 全程 ≈ 0.5-0.9，比 attention 更均匀
+
+**Insights 和后续实验方向**：
+
+| 方向 | 想法 | 预期收益 |
+|------|------|----------|
+| **浅层减配** | 浅层用更小的 attention（fewer heads）| 省参数给深层 |
+| **渐进式架构** | 浅层直接去掉 attention，只用 MLP | 参数重新分配 |
+| **固定 α 训练** | 用学到的 α 作为固定超参，省掉学习开销 | 保留好处，去除训练不稳定 |
+| **Layer Scaling** | 参考 CaiT，用学到的 pattern 初始化 | 更好的初始化 |
+
+**结论**：
+虽然 mHC 没有直接改善 BPB，但揭示了重要的架构 insight——**不是所有层都平等**。这为后续的参数分配优化提供了数据支持。
+
+**相关文件**：
+- `/tmp/parameter-golf-solution/modal_mhc_residual.py`
+
+---
+
+### 实验 10: 数据质量过滤
+
+**日期**: 2026-04-03
+
+**假设**：用困惑度过滤掉"太简单"和"太难"的数据，可能提升训练效果
+
+**方法**：
+1. 训练小模型计算每个 chunk (1024 tokens) 的 PPL
+2. 保留 P5-P95 范围的数据
+3. 尝试加权采样（高斯权重，PPL 接近中位数的权重高）
+
+**PPL 分布**：
+- Min: 7.7, Max: 2567.3
+- Mean: 254.7, Median: 247.7
+- P5: 164.7, P95: 360.9
+
+**实验结果**：
+
+| 方法 | σ | BPB | vs Baseline |
+|------|---|-----|-------------|
+| Uniform Sampling | - | **1.5188** | - |
+| Gaussian Weighted | 80 | 1.5214 | -0.17% ❌ |
+| Gaussian Weighted | 150 | 1.5251 | -0.41% ❌ |
+
+**结论**：
+数据多样性比质量过滤更重要。过滤掉"差"数据反而损害了模型泛化能力。
+
+---
+
+### 实验 11: EMA 权重平均
+
+**日期**: 2026-04-03
+
+**假设**：EMA 平滑训练噪声，可能带来更好的泛化
+
+**实现**：
+```python
+ema_decay = 0.999
+for step in training:
+    # 正常训练...
+    # 更新 EMA
+    for k, v in model.state_dict().items():
+        ema_state[k] = ema_decay * ema_state[k] + (1 - ema_decay) * v
+```
+
+**结果**：
+
+| 权重类型 | BPB |
+|----------|-----|
+| Normal | **1.5187** |
+| EMA (decay=0.999) | 1.5314 ❌ |
+
+**结论**：
+EMA 在 5000 步训练中反而更差。可能原因：
+1. 训练步数太少，EMA 还没充分平滑
+2. 学习率 schedule 已经很好，EMA 多余
+
+---
+
+## 🚀 下一步计划
+
+1. ✅ ~~mHC 残差~~ — 负面结果，但有 insight
+2. ✅ ~~数据过滤~~ — 负面结果
+3. ✅ ~~EMA~~ — 负面结果
+4. **渐进式 Attention** — 基于 mHC 发现，浅层去 attention
+5. **层级差异化** — 浅层少参数，深层多参数
+6. **更长训练** — 当前 5000 步可能不够
+7. **组合最佳技术**
+
+---
+
+*最后更新: 2026-04-03*
