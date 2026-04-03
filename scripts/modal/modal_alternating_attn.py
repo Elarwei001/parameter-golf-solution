@@ -24,6 +24,9 @@ modal run --detach scripts/modal/modal_alternating_attn.py -- --mhc
 
 # Alt-B: 加大 dim
 modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448
+
+# Alt-B + mHC:
+modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448 --mhc
 ```
 
 ## Baseline 对比
