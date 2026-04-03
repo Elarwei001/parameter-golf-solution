@@ -472,7 +472,7 @@ def main():
     parser.add_argument("--local_window", type=int, default=128, help="Local attention window (default: 128)")
     parser.add_argument("--steps", type=int, default=5000, help="Training steps (default: 5000)")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()  # Ignore unknown args from Modal
     
     mode = "mHC" if args.mhc else "Vanilla"
     print(f"\n[START] Alternating Attention Experiment")
