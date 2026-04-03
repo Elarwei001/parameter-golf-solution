@@ -1,12 +1,33 @@
 """
 Alternating Attention 实验
-- 奇数层: Local sliding-window attention
-- 偶数层: Global full attention
-- 最后一层: 强制 Global
+==========================
 
-两个版本:
-1. Vanilla: 标准 MHA
-2. mHC: 带学习到的 α/β 参数
+## 技术
+- 偶数层 (0,2,4,...) + 最后一层: Global full attention
+- 奇数层 (1,3,5,...): Local sliding-window attention (window=128)
+- 灵感来源: Gemma 3n / gamma4 的建议
+
+## 假设
+Local attention 计算量更小，通过 Local+Global 交替，可以在相同计算成本下使用更大的模型。
+
+## 实验设计
+- Alt-A: dim=384 (同 baseline)，验证 Alternating 不掉点
+- Alt-B: dim=448 (加大)，验证省下的计算量能否换成更大 dim
+
+## 运行
+```bash
+# Alt-A: 同 baseline 配置
+modal run --detach scripts/modal/modal_alternating_attn.py
+
+# Alt-A + mHC:
+modal run --detach scripts/modal/modal_alternating_attn.py -- --mhc
+
+# Alt-B: 加大 dim
+modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448
+```
+
+## Baseline 对比
+- mHC v2, 20层, dim=384: BPB = 1.5025
 """
 import modal
 import os
@@ -389,23 +410,30 @@ def train_alternating(
 @app.local_entrypoint()
 def main():
     import sys
+    import argparse
     
-    # 默认跑 Vanilla
-    use_mhc = "--mhc" in sys.argv
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mhc", action="store_true", help="Use learned mHC parameters")
+    parser.add_argument("--dim", type=int, default=384, help="Model dimension (default: 384)")
+    parser.add_argument("--n_layers", type=int, default=20, help="Number of layers (default: 20)")
+    parser.add_argument("--local_window", type=int, default=128, help="Local attention window (default: 128)")
+    args = parser.parse_args()
     
-    mode = "mHC" if use_mhc else "Vanilla"
-    print(f"\n🚀 启动 Alternating Attention 实验 ({mode})...")
+    mode = "mHC" if args.mhc else "Vanilla"
+    print(f"\n🚀 启动 Alternating Attention 实验")
+    print(f"   Mode: {mode}, dim={args.dim}, layers={args.n_layers}, window={args.local_window}")
     
     result = train_alternating.remote(
-        n_layers=20,
-        dim=384,
+        n_layers=args.n_layers,
+        dim=args.dim,
         n_heads=8,
         n_kv_heads=4,
-        local_window=128,
-        use_mhc=use_mhc,
+        local_window=args.local_window,
+        use_mhc=args.mhc,
         seed=42,
         steps=5000,
     )
     
     print(f"\n🏁 BPB: {result['val_bpb']:.4f}")
+    print(f"🏁 vs Baseline (1.5025): {(result['val_bpb'] - 1.5025) / 1.5025 * 100:+.2f}%")
     print(f"🏁 Global 层: {result['global_layers']}, Local 层: {result['local_layers']}")
