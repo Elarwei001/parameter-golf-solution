@@ -2,10 +2,11 @@
 
 ## Language
 
-**All documentation must be in English.**
+**All code and documentation must be in English.**
 
 - README.md, EXPERIMENTS.md, all docs/*.md files
 - Code comments
+- **Print statements and log output** (logs will be submitted)
 - Commit messages
 - Exception: Chinese is allowed in personal notes or scratch files (not committed)
 
