@@ -152,7 +152,7 @@ Layer 19: β_mlp = 0.627
 ## Visualizations
 
 ### 20-Layer Model Complete Analysis
-![MHC 20L Analysis](../mhc_deepseek_20L_analysis.png)
+![MHC 20L Analysis](../mhc_deepseek_20L_analysis_v2.png)
 
 ### 11L vs 20L Comparison
 ![MHC Comparison](../mhc_11L_vs_20L_comparison.png)
