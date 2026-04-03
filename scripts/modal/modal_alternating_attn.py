@@ -357,7 +357,7 @@ def train_alternating(
     # Resume from checkpoint if specified
     start_step = 0
     if resume_from and os.path.exists(resume_from):
-        print(f"\n📂 Resuming from checkpoint: {resume_from}")
+        print(f"\n[RESUME] Loading checkpoint: {resume_from}")
         checkpoint = torch.load(resume_from)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -384,7 +384,7 @@ def train_alternating(
     os.makedirs(checkpoint_dir, exist_ok=True)
     run_name = f"alt_{mode_str}_dim{dim}_L{n_layers}"
     
-    print(f"\n🚀 Starting training ({steps} steps)...")
+    print(f"\n[TRAIN] Starting training ({steps} steps)...")
     print(f"   Checkpoints will be saved to: {checkpoint_dir}/{run_name}_*.pt\n")
     start_time = time.time()
     
@@ -422,7 +422,7 @@ def train_alternating(
                     'use_mhc': use_mhc,
                 }
             }, checkpoint_path)
-            print(f"   💾 Checkpoint saved: {checkpoint_path}")
+            print(f"   [CHECKPOINT] Saved: {checkpoint_path}")
             data_volume.commit()  # Persist to volume
     
     print(f"\nTraining completed: {time.time() - start_time:.0f}s")
@@ -440,7 +440,7 @@ def train_alternating(
     val_bpb = val_loss / math.log(2)
     
     print("\n" + "="*70)
-    print("🏆 Results")
+    print("[RESULTS]")
     print("="*70)
     print(f"  Mode: {mode_str}")
     print(f"  Layers: {n_layers} (Global: {global_layers}, Local: {local_layers})")
@@ -475,7 +475,7 @@ def main():
     args = parser.parse_args()
     
     mode = "mHC" if args.mhc else "Vanilla"
-    print(f"\n🚀 Starting Alternating Attention Experiment")
+    print(f"\n[START] Alternating Attention Experiment")
     print(f"   Mode: {mode}, dim={args.dim}, layers={args.n_layers}, window={args.local_window}")
     
     result = train_alternating.remote(
@@ -490,6 +490,6 @@ def main():
         resume_from=args.resume,
     )
     
-    print(f"\n🏁 BPB: {result['val_bpb']:.4f}")
-    print(f"🏁 vs Baseline (1.5025): {(result['val_bpb'] - 1.5025) / 1.5025 * 100:+.2f}%")
-    print(f"🏁 Global layers: {result['global_layers']}, Local layers: {result['local_layers']}")
+    print(f"\n[FINAL] BPB: {result['val_bpb']:.4f}")
+    print(f"[FINAL] vs Baseline (1.5025): {(result['val_bpb'] - 1.5025) / 1.5025 * 100:+.2f}%")
+    print(f"[FINAL] Global layers: {result['global_layers']}, Local layers: {result['local_layers']}")

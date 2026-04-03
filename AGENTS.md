@@ -10,6 +10,14 @@
 - Commit messages
 - Exception: Chinese is allowed in personal notes or scratch files (not committed)
 
+## No Emoji in Code
+
+**Do not use emoji in code, comments, or print statements.**
+
+- Use text markers instead: `[TRAIN]`, `[RESULTS]`, `[CHECKPOINT]`, etc.
+- Logs should be professional and terminal-friendly
+- Emoji can cause encoding issues in some environments
+
 ## Code Style
 
 - Python: Follow PEP 8
