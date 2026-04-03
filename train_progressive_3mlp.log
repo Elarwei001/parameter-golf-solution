@@ -25,3 +25,10 @@ https://modal.com/apps/elarweis/main/ap-vEWEBHUuW7vx5hdflbV4rb
 🚀 开始训练 (5000 steps)...
 Step 500/5000 | Loss 4.9607 | LR 9.84e-04 | Time 99s
 Step 1000/5000 | Loss 4.4685 | LR 9.19e-04 | Time 197s
+Step 1500/5000 | Loss 4.3237 | LR 8.12e-04 | Time 296s
+Step 2000/5000 | Loss 4.1800 | LR 6.73e-04 | Time 394s
+Step 2500/5000 | Loss 4.0835 | LR 5.16e-04 | Time 493s
+Step 3000/5000 | Loss 3.9920 | LR 3.58e-04 | Time 591s
+Step 3500/5000 | Loss 3.9720 | LR 2.14e-04 | Time 690s
+Step 4000/5000 | Loss 3.8684 | LR 9.93e-05 | Time 788s
+Step 4500/5000 | Loss 3.8220 | LR 2.55e-05 | Time 887s
