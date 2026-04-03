@@ -33,6 +33,7 @@ modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448 --mhc
 
 ## Baseline 对比
 - mHC v2, 20层, dim=384: BPB = 1.5025
+- 脚本: https://github.com/Elarwei001/parameter-golf-solution/blob/master/scripts/modal/modal_mhc_v2_deep.py
 """
 import modal
 import os
