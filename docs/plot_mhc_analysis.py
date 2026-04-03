@@ -30,6 +30,27 @@ data_11L = {
     'beta_mlp':   [0.60, 0.75, 0.85, 0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55],
 }
 
+# 32 层模型实验数据 (BPB: 1.5606)
+data_32L = {
+    'layer': list(range(32)),
+    'alpha_attn': [1.225, 1.144, 1.089, 1.062, 1.041, 1.042, 1.035, 1.025, 1.016, 1.008,
+                   1.003, 0.994, 0.991, 0.982, 0.974, 0.977, 0.970, 0.976, 0.973, 0.966,
+                   0.961, 0.960, 0.949, 0.938, 0.917, 0.907, 0.891, 0.843, 0.982, 0.989,
+                   0.983, 0.977],
+    'beta_attn':  [0.271, 0.277, 0.582, 0.508, 0.793, 0.611, 0.617, 0.521, 0.686, 0.771,
+                  0.640, 0.848, 0.739, 0.779, 0.897, 0.758, 0.943, 0.827, 0.866, 0.747,
+                  0.827, 0.714, 0.742, 0.639, 0.828, 0.818, 0.746, 1.393, 0.806, 0.683,
+                  0.645, 0.598],
+    'alpha_mlp':  [1.189, 1.121, 1.080, 1.049, 1.043, 1.035, 1.027, 1.016, 1.012, 1.008,
+                  0.999, 0.998, 0.990, 0.983, 0.988, 0.978, 0.983, 0.981, 0.974, 0.965,
+                  0.966, 0.957, 0.947, 0.928, 0.919, 0.904, 0.872, 0.990, 0.985, 0.978,
+                  0.951, 0.923],
+    'beta_mlp':   [0.527, 0.701, 0.795, 0.833, 0.886, 0.893, 0.871, 0.848, 0.829, 0.794,
+                  0.763, 0.725, 0.679, 0.640, 0.631, 0.587, 0.597, 0.593, 0.542, 0.573,
+                  0.576, 0.550, 0.554, 0.518, 0.560, 0.550, 0.491, 0.615, 0.657, 0.673,
+                  0.671, 0.628],
+}
+
 
 def plot_mhc_analysis():
     """生成完整的 MHC 分析图"""
@@ -242,14 +263,116 @@ def plot_heatmap():
     plt.close()
 
 
+def plot_32L_analysis():
+    """生成 32 层模型分析图"""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('MHC DeepSeek Analysis: 32-Layer Model (BPB: 1.5606)\nLearned α/β Residual Coefficients', 
+                 fontsize=14, fontweight='bold')
+    
+    layers = np.array(data_32L['layer'])
+    
+    # ===== Plot 1: α values =====
+    ax1 = axes[0, 0]
+    ax1.plot(layers, data_32L['alpha_attn'], 'o-', color='#2196F3', linewidth=2, 
+             markersize=5, label='α_attn')
+    ax1.plot(layers, data_32L['alpha_mlp'], 's-', color='#FF9800', linewidth=2, 
+             markersize=5, label='α_mlp')
+    ax1.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, label='baseline (1.0)')
+    ax1.fill_between(layers, 0.8, 1.25, alpha=0.1, color='gray')
+    ax1.set_xlabel('Layer')
+    ax1.set_ylabel('α value')
+    ax1.set_title('α (Residual Weight): Higher in shallow, lower in deep')
+    ax1.legend(loc='upper right')
+    ax1.set_xlim(-0.5, 31.5)
+    ax1.set_xticks(range(0, 32, 2))
+    ax1.set_ylim(0.8, 1.25)
+    ax1.grid(True, alpha=0.3)
+    
+    # ===== Plot 2: β values =====
+    ax2 = axes[0, 1]
+    ax2.plot(layers, data_32L['beta_attn'], 'o-', color='#E91E63', linewidth=2, 
+             markersize=5, label='β_attn')
+    ax2.plot(layers, data_32L['beta_mlp'], 's-', color='#4CAF50', linewidth=2, 
+             markersize=5, label='β_mlp')
+    
+    # Highlight Layer 27 anomaly
+    ax2.scatter([27], [data_32L['beta_attn'][27]], s=200, color='red', zorder=5, 
+                edgecolor='white', linewidth=2, marker='*')
+    ax2.annotate('Layer 27\nβ_attn=1.39!', xy=(27, 1.393), xytext=(22, 1.2),
+                 arrowprops=dict(arrowstyle='->', color='red'),
+                 fontsize=10, color='red', fontweight='bold')
+    
+    ax2.set_xlabel('Layer')
+    ax2.set_ylabel('β value')
+    ax2.set_title('β (Sublayer Output Weight): Layer 27 anomaly!')
+    ax2.legend(loc='upper left')
+    ax2.set_xlim(-0.5, 31.5)
+    ax2.set_xticks(range(0, 32, 2))
+    ax2.set_ylim(0.2, 1.5)
+    ax2.grid(True, alpha=0.3)
+    
+    # ===== Plot 3: α + β sum =====
+    ax3 = axes[1, 0]
+    sum_attn = np.array(data_32L['alpha_attn']) + np.array(data_32L['beta_attn'])
+    sum_mlp = np.array(data_32L['alpha_mlp']) + np.array(data_32L['beta_mlp'])
+    
+    ax3.bar(layers - 0.2, sum_attn, 0.4, label='α+β (Attention)', color='#2196F3', alpha=0.7)
+    ax3.bar(layers + 0.2, sum_mlp, 0.4, label='α+β (MLP)', color='#FF9800', alpha=0.7)
+    ax3.axhline(y=2.0, color='gray', linestyle='--', alpha=0.5, label='standard (2.0)')
+    
+    # Highlight Layer 27
+    ax3.bar([27 - 0.2], [sum_attn[27]], 0.4, color='red', alpha=0.9)
+    
+    ax3.set_xlabel('Layer')
+    ax3.set_ylabel('α + β')
+    ax3.set_title('Total Residual Weight (α + β): Layer 27 has highest sum')
+    ax3.legend(loc='upper right')
+    ax3.set_xlim(-0.5, 31.5)
+    ax3.set_xticks(range(0, 32, 2))
+    ax3.set_ylim(1.3, 2.4)
+    ax3.grid(True, alpha=0.3, axis='y')
+    
+    # ===== Plot 4: 20L vs 32L comparison =====
+    ax4 = axes[1, 1]
+    
+    # Normalize layer positions to 0-1 range
+    layers_20_norm = np.array(data_20L['layer']) / 19
+    layers_32_norm = np.array(data_32L['layer']) / 31
+    
+    ax4.plot(layers_20_norm, data_20L['alpha_attn'], 'o--', color='#2196F3', 
+             linewidth=2, markersize=5, alpha=0.6, label='20L α_attn')
+    ax4.plot(layers_32_norm, data_32L['alpha_attn'], 's-', color='#2196F3', 
+             linewidth=2, markersize=4, label='32L α_attn')
+    ax4.plot(layers_20_norm, data_20L['beta_attn'], 'o--', color='#E91E63', 
+             linewidth=2, markersize=5, alpha=0.6, label='20L β_attn')
+    ax4.plot(layers_32_norm, data_32L['beta_attn'], 's-', color='#E91E63', 
+             linewidth=2, markersize=4, label='32L β_attn')
+    
+    ax4.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+    ax4.set_xlabel('Relative Layer Position (0=first, 1=last)')
+    ax4.set_ylabel('Coefficient Value')
+    ax4.set_title('20L vs 32L Comparison (Attention)')
+    ax4.legend(loc='upper right', ncol=2)
+    ax4.set_ylim(0.2, 1.5)
+    ax4.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('mhc_deepseek_32L_analysis.png', dpi=150, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    print('Saved: mhc_deepseek_32L_analysis.png')
+    plt.close()
+
+
 if __name__ == '__main__':
     print('Generating MHC analysis visualizations...\n')
     
     plot_mhc_analysis()
     plot_comparison()
     plot_heatmap()
+    plot_32L_analysis()
     
     print('\nDone! Generated:')
     print('  - mhc_deepseek_20L_analysis.png')
     print('  - mhc_11L_vs_20L_comparison.png')
     print('  - mhc_heatmap.png')
+    print('  - mhc_deepseek_32L_analysis.png')

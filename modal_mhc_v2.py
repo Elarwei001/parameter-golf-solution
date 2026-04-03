@@ -11,10 +11,7 @@ app = modal.App("mhc-v2-study")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install([
-        "torch>=2.0",
-        "numpy",
-    ])
+    .pip_install(["torch", "numpy"])
 )
 
 data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=True)
@@ -24,7 +21,7 @@ data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=Tr
     image=image,
     gpu="A100-40GB",
     volumes={"/data": data_volume},
-    timeout=3600,
+    timeout=7200,
 )
 def train_mhc_v2(
     seed: int = 42,
@@ -221,15 +218,20 @@ def train_mhc_v2(
             self.ln_f = RMSNorm(dim)
             self.head = nn.Linear(dim, vocab_size, bias=False)
         
-        def forward(self, idx):
+        def forward(self, idx, use_checkpoint=False):
             x = self.tok_emb(idx)
-            for layer in self.layers:
-                x = layer(x)
+            if use_checkpoint and self.training:
+                from torch.utils.checkpoint import checkpoint
+                for layer in self.layers:
+                    x = checkpoint(layer, x, use_reentrant=False)
+            else:
+                for layer in self.layers:
+                    x = layer(x)
             x = self.ln_f(x)
             return self.head(x)
         
-        def loss(self, idx):
-            logits = self(idx[:, :-1])
+        def loss(self, idx, use_checkpoint=False):
+            logits = self(idx[:, :-1], use_checkpoint=use_checkpoint)
             targets = idx[:, 1:]
             return F.cross_entropy(logits.reshape(-1, self.vocab_size),
                                    targets.reshape(-1))
@@ -284,7 +286,9 @@ def train_mhc_v2(
             pg['lr'] = lr * lr_mult
         
         batch = get_batch(train_data)
-        loss = model.loss(batch)
+        # Use gradient checkpointing for deep models (>32 layers)
+        use_ckpt = n_layers > 32
+        loss = model.loss(batch, use_checkpoint=use_ckpt)
         
         opt.zero_grad()
         loss.backward()
@@ -343,24 +347,28 @@ def train_mhc_v2(
     print("层级趋势分析")
     print("="*70)
     
-    # 计算浅层 (0-3) vs 深层 (7-10) 的平均值
-    shallow_alpha_attn = np.mean([final_params[i]['alpha_attn'] for i in range(4)])
-    shallow_beta_attn = np.mean([final_params[i]['beta_attn'] for i in range(4)])
-    deep_alpha_attn = np.mean([final_params[i]['alpha_attn'] for i in range(7, 11)])
-    deep_beta_attn = np.mean([final_params[i]['beta_attn'] for i in range(7, 11)])
+    # 动态计算浅层 vs 深层的范围
+    n_total = len(final_params)
+    shallow_end = min(n_total // 4, n_total)
+    deep_start = max(n_total * 3 // 4, 0)
     
-    shallow_alpha_mlp = np.mean([final_params[i]['alpha_mlp'] for i in range(4)])
-    shallow_beta_mlp = np.mean([final_params[i]['beta_mlp'] for i in range(4)])
-    deep_alpha_mlp = np.mean([final_params[i]['alpha_mlp'] for i in range(7, 11)])
-    deep_beta_mlp = np.mean([final_params[i]['beta_mlp'] for i in range(7, 11)])
+    shallow_alpha_attn = np.mean([final_params[i]['alpha_attn'] for i in range(shallow_end)])
+    shallow_beta_attn = np.mean([final_params[i]['beta_attn'] for i in range(shallow_end)])
+    deep_alpha_attn = np.mean([final_params[i]['alpha_attn'] for i in range(deep_start, n_total)])
+    deep_beta_attn = np.mean([final_params[i]['beta_attn'] for i in range(deep_start, n_total)])
+    
+    shallow_alpha_mlp = np.mean([final_params[i]['alpha_mlp'] for i in range(shallow_end)])
+    shallow_beta_mlp = np.mean([final_params[i]['beta_mlp'] for i in range(shallow_end)])
+    deep_alpha_mlp = np.mean([final_params[i]['alpha_mlp'] for i in range(deep_start, n_total)])
+    deep_beta_mlp = np.mean([final_params[i]['beta_mlp'] for i in range(deep_start, n_total)])
     
     print(f"\nAttention:")
-    print(f"  浅层 (0-3):  α={shallow_alpha_attn:.3f}, β={shallow_beta_attn:.3f}")
-    print(f"  深层 (7-10): α={deep_alpha_attn:.3f}, β={deep_beta_attn:.3f}")
+    print(f"  Shallow (0-{shallow_end-1}):  α={shallow_alpha_attn:.3f}, β={shallow_beta_attn:.3f}")
+    print(f"  Deep ({deep_start}-{n_total-1}): α={deep_alpha_attn:.3f}, β={deep_beta_attn:.3f}")
     
     print(f"\nMLP:")
-    print(f"  浅层 (0-3):  α={shallow_alpha_mlp:.3f}, β={shallow_beta_mlp:.3f}")
-    print(f"  深层 (7-10): α={deep_alpha_mlp:.3f}, β={deep_beta_mlp:.3f}")
+    print(f"  Shallow (0-{shallow_end-1}):  α={shallow_alpha_mlp:.3f}, β={shallow_beta_mlp:.3f}")
+    print(f"  Deep ({deep_start}-{n_total-1}): α={deep_alpha_mlp:.3f}, β={deep_beta_mlp:.3f}")
     
     print(f"\n{'='*70}")
     print(f"🏆 结果 (mHC v2)")
