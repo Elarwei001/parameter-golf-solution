@@ -43,6 +43,11 @@ Vocab 32K  → Embedding uses 6 MB (too much!)
 
 See [EXPERIMENTS.md](EXPERIMENTS.md) for full experiment logs.
 
+### 🆕 MHC DeepSeek Residual Study
+See [docs/MHC_DEEPSEEK_ANALYSIS.md](docs/MHC_DEEPSEEK_ANALYSIS.md) for our study on learnable layer-wise residual coefficients inspired by DeepSeek-V3.
+
+![MHC Heatmap](mhc_heatmap.png)
+
 ### Activation Functions
 | Function | BPB | Winner |
 |----------|-----|--------|
@@ -149,4 +154,4 @@ modal run modal_qat.py::train_qat --steps 5000 --warmup-steps 500
 
 ---
 
-*Last updated: 2026-04-01*
+*Last updated: 2026-04-03*
