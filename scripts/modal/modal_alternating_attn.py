@@ -1,39 +1,40 @@
 """
-Alternating Attention 实验
-==========================
+Alternating Attention Experiment
+================================
 
-## 技术
-- 偶数层 (0,2,4,...) + 最后一层: Global full attention
-- 奇数层 (1,3,5,...): Local sliding-window attention (window=128)
-- 灵感来源: Gemma 3n / gamma4 的建议
+## Technique
+- Even layers (0,2,4,...) + last layer: Global full attention
+- Odd layers (1,3,5,...): Local sliding-window attention (window=128)
+- Inspired by: Gemma 3n / gamma4's suggestion
 
-## 假设
-Local attention 计算量更小，通过 Local+Global 交替，可以在相同计算成本下使用更大的模型。
+## Hypothesis
+Local attention has lower compute cost. By alternating Local+Global, we can use
+larger models at the same compute budget.
 
-## 实验设计
-- Alt-A: dim=384 (同 baseline)，验证 Alternating 不掉点
-- Alt-A + mHC: dim=384 + mHC 参数初始化
-- Alt-B: dim=448 (加大)，验证省下的计算量能否换成更大 dim
-- Alt-B + mHC: dim=448 + mHC 参数初始化
+## Experiment Design
+- Alt-A: dim=384 (same as baseline), verify Alternating doesn't hurt
+- Alt-A + mHC: dim=384 + mHC parameter initialization
+- Alt-B: dim=448 (larger), verify saved compute can be traded for larger dim
+- Alt-B + mHC: dim=448 + mHC parameter initialization
 
-## 运行
+## Run
 ```bash
-# Alt-A: 同 baseline 配置
+# Alt-A: same as baseline config
 modal run --detach scripts/modal/modal_alternating_attn.py
 
 # Alt-A + mHC:
 modal run --detach scripts/modal/modal_alternating_attn.py -- --mhc
 
-# Alt-B: 加大 dim
+# Alt-B: larger dim
 modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448
 
 # Alt-B + mHC:
 modal run --detach scripts/modal/modal_alternating_attn.py -- --dim 448 --mhc
 ```
 
-## Baseline 对比
-- mHC v2, 20层, dim=384: BPB = 1.5025
-- 脚本: https://github.com/Elarwei001/parameter-golf-solution/blob/master/scripts/modal/modal_mhc_v2_deep.py
+## Baseline Comparison
+- mHC v2, 20 layers, dim=384: BPB = 1.5025
+- Script: https://github.com/Elarwei001/parameter-golf-solution/blob/master/scripts/modal/modal_mhc_v2_deep.py
 """
 import modal
 import os
@@ -85,15 +86,15 @@ MHC_PARAMS_20L = [
 )
 def train_alternating(
     seed: int = 42,
-    # 架构参数
+    # Architecture params
     dim: int = 384,
     n_layers: int = 20,
     n_heads: int = 8,
     n_kv_heads: int = 4,
-    local_window: int = 128,  # Local attention 的窗口大小
-    # 模式选择
-    use_mhc: bool = False,  # 是否使用 mHC 参数
-    # 训练参数
+    local_window: int = 128,  # Local attention window size
+    # Mode selection
+    use_mhc: bool = False,  # Whether to use learned mHC parameters
+    # Training params
     lr: float = 1e-3,
     batch_size: int = 64,
     seq_len: int = 256,
@@ -117,12 +118,12 @@ def train_alternating(
     
     mode_str = "mHC" if use_mhc else "Vanilla"
     print("="*70)
-    print(f"Alternating Attention 实验: {n_layers} 层, {mode_str}")
-    print(f"奇数层: Local (window={local_window}), 偶数层+最后层: Global")
+    print(f"Alternating Attention Experiment: {n_layers} layers, {mode_str}")
+    print(f"Odd layers: Local (window={local_window}), Even layers + last: Global")
     print("="*70)
     
-    # 加载数据
-    print("\n加载数据...")
+    # Load data
+    print("\nLoading data...")
     train_files = sorted([f for f in os.listdir(DATA_DIR) if 'train' in f])
     val_files = sorted([f for f in os.listdir(DATA_DIR) if 'val' in f])
     
@@ -147,7 +148,7 @@ def train_alternating(
     print(f"  Train: {len(train_tokens)/1e6:.1f}M tokens")
     print(f"  Val: {len(val_tokens)/1e6:.1f}M tokens")
     
-    # 模型定义
+    # Model definition
     class RMSNorm(nn.Module):
         def __init__(self, dim, eps=1e-6):
             super().__init__()
@@ -174,7 +175,7 @@ def train_alternating(
             return torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1)
     
     class AlternatingAttention(nn.Module):
-        """支持 Local/Global 切换的 Attention"""
+        """Attention with Local/Global switching"""
         def __init__(self, dim, n_heads, n_kv_heads=None, local_window=128, is_global=True):
             super().__init__()
             self.n_heads = n_heads
@@ -208,7 +209,7 @@ def train_alternating(
             scale = 1.0 / math.sqrt(self.head_dim)
             scores = torch.matmul(q, k.transpose(-2, -1)) * scale
             
-            # XSA: 去掉对角线 (与 baseline 一致)
+            # XSA: mask diagonal (same as baseline)
             diag_mask = torch.eye(T, device=x.device, dtype=torch.bool)
             scores = scores.masked_fill(diag_mask, 0.0)
             
@@ -218,7 +219,7 @@ def train_alternating(
             causal_mask = cols > rows
             
             if self.is_global:
-                # Global: 只有 causal mask
+                # Global: causal mask only
                 mask = causal_mask
             else:
                 # Local: causal + window mask
@@ -248,9 +249,9 @@ def train_alternating(
             super().__init__()
             self.layer_idx = layer_idx
             
-            # 决定是 Global 还是 Local
-            # 偶数层 (0, 2, 4, ...) 和最后一层: Global
-            # 奇数层 (1, 3, 5, ...): Local
+            # Decide Global or Local
+            # Even layers (0, 2, 4, ...) and last layer: Global
+            # Odd layers (1, 3, 5, ...): Local
             is_last = (layer_idx == n_layers - 1)
             is_global = (layer_idx % 2 == 0) or is_last
             self.is_global = is_global
@@ -260,7 +261,7 @@ def train_alternating(
             self.ln1 = RMSNorm(dim)
             self.ln2 = RMSNorm(dim)
             
-            # mHC 参数
+            # mHC parameters
             self.use_mhc = use_mhc
             if use_mhc and layer_idx < len(MHC_PARAMS_20L):
                 params = MHC_PARAMS_20L[layer_idx]
@@ -282,7 +283,7 @@ def train_alternating(
                 mlp_out = self.mlp(self.ln2(x))
                 x = self.alpha_mlp * x + self.beta_mlp * mlp_out
             else:
-                # Vanilla: 标准残差
+                # Vanilla: standard residual
                 x = x + self.attn(self.ln1(x))
                 x = x + self.mlp(self.ln2(x))
             
@@ -313,7 +314,7 @@ def train_alternating(
             
             return logits, loss
     
-    # 创建模型
+    # Create model
     model = AlternatingTransformer(
         vocab_size=VOCAB_SIZE,
         dim=dim,
@@ -324,24 +325,24 @@ def train_alternating(
         use_mhc=use_mhc,
     ).to(device)
     
-    # 统计参数
+    # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
     
-    # 统计 Global/Local 层数
+    # Count Global/Local layers
     global_layers = sum(1 for b in model.blocks if b.is_global)
     local_layers = n_layers - global_layers
     
-    print(f"\n模型: {total_params/1e6:.2f}M params")
-    print(f"  Global 层: {global_layers}, Local 层: {local_layers}")
-    print(f"  使用 mHC: {use_mhc}")
+    print(f"\nModel: {total_params/1e6:.2f}M params")
+    print(f"  Global layers: {global_layers}, Local layers: {local_layers}")
+    print(f"  Using mHC: {use_mhc}")
     
-    # 打印每层类型
-    print("\n层配置:")
+    # Print layer configuration
+    print("\nLayer configuration:")
     for i, block in enumerate(model.blocks):
         attn_type = "Global" if block.is_global else f"Local(w={local_window})"
         print(f"  Layer {i:2d}: {attn_type}")
     
-    # 训练
+    # Training
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.1)
     
     def get_batch(split):
@@ -358,7 +359,7 @@ def train_alternating(
         progress = (step - 200) / (steps - 200)
         return 0.5 * (1 + math.cos(math.pi * progress))
     
-    print(f"\n🚀 开始训练 ({steps} steps)...\n")
+    print(f"\n🚀 Starting training ({steps} steps)...\n")
     start_time = time.time()
     
     for step in range(1, steps + 1):
@@ -378,9 +379,9 @@ def train_alternating(
             current_lr = optimizer.param_groups[0]['lr']
             print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {current_lr:.2e} | Time {elapsed:.0f}s")
     
-    print(f"\n训练完成: {time.time() - start_time:.0f}s")
+    print(f"\nTraining completed: {time.time() - start_time:.0f}s")
     
-    # 验证
+    # Validation
     model.eval()
     val_losses = []
     with torch.no_grad():
@@ -393,11 +394,11 @@ def train_alternating(
     val_bpb = val_loss / math.log(2)
     
     print("\n" + "="*70)
-    print("🏆 结果")
+    print("🏆 Results")
     print("="*70)
-    print(f"  模式: {mode_str}")
-    print(f"  层数: {n_layers} (Global: {global_layers}, Local: {local_layers})")
-    print(f"  参数: {total_params/1e6:.2f}M")
+    print(f"  Mode: {mode_str}")
+    print(f"  Layers: {n_layers} (Global: {global_layers}, Local: {local_layers})")
+    print(f"  Params: {total_params/1e6:.2f}M")
     print(f"  Val Loss: {val_loss:.4f}")
     print(f"  Val BPB:  {val_bpb:.4f}")
     print("="*70)
@@ -426,7 +427,7 @@ def main():
     args = parser.parse_args()
     
     mode = "mHC" if args.mhc else "Vanilla"
-    print(f"\n🚀 启动 Alternating Attention 实验")
+    print(f"\n🚀 Starting Alternating Attention Experiment")
     print(f"   Mode: {mode}, dim={args.dim}, layers={args.n_layers}, window={args.local_window}")
     
     result = train_alternating.remote(
@@ -442,4 +443,4 @@ def main():
     
     print(f"\n🏁 BPB: {result['val_bpb']:.4f}")
     print(f"🏁 vs Baseline (1.5025): {(result['val_bpb'] - 1.5025) / 1.5025 * 100:+.2f}%")
-    print(f"🏁 Global 层: {result['global_layers']}, Local 层: {result['local_layers']}")
+    print(f"🏁 Global layers: {result['global_layers']}, Local layers: {result['local_layers']}")
