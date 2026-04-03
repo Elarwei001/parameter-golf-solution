@@ -1,15 +1,15 @@
-# MHC DeepSeek 深度研究实验
+# MHC DeepSeek Residual Study
 
-> 基于 DeepSeek-V3 论文的 Multi-Head Latent Attention (MHC) 残差连接策略研究
+> Exploring learnable layer-wise residual coefficients (α/β) based on DeepSeek-V3's Multi-Head Latent Attention design.
 
-## 🎯 研究目标
+## Objective
 
-探索可学习的层级残差系数 (α/β) 在不同深度模型中的分布规律，验证 DeepSeek-V3 的设计直觉。
+Study how learned α/β residual coefficients distribute across layers in models of different depths, validating DeepSeek-V3's design intuition.
 
-## 📊 实验设置
+## Experiment Setup
 
-| 参数 | 11 层模型 | 20 层模型 |
-|------|-----------|-----------|
+| Parameter | 11-Layer Model | 20-Layer Model |
+|-----------|----------------|----------------|
 | Layers | 11 | 20 |
 | Dimension | 384 | 384 |
 | Parameters | 18.5M | 32.85M |
@@ -17,22 +17,22 @@
 | Hardware | Modal H100 | Modal H100 |
 | Training Time | ~15 min | ~31 min |
 
-### MHC 残差结构
+### MHC Residual Structure
 
 ```python
-# 标准残差连接: x + sublayer(x)
-# MHC 残差连接: α * sublayer(x) + β * x
+# Standard residual: x + sublayer(x)
+# MHC residual:      α * sublayer(x) + β * x
 
-# 每层学习 4 个参数:
-# - α_attn, β_attn: Attention 子层
-# - α_mlp, β_mlp: MLP 子层
+# Each layer learns 4 parameters:
+# - α_attn, β_attn: Attention sublayer
+# - α_mlp, β_mlp: MLP sublayer
 ```
 
 ---
 
-## 🏆 实验结果
+## Results
 
-### 20 层模型详细结果
+### 20-Layer Model Detailed Results
 
 | Layer | α_attn | β_attn | α_mlp | β_mlp | α+β(attn) | α+β(mlp) |
 |-------|--------|--------|-------|-------|-----------|----------|
@@ -57,116 +57,116 @@
 | 18 | 0.867 | 0.818 | 0.874 | 0.583 | 1.685 | 1.457 |
 | 19 | 0.825 | **1.049** | 0.922 | 0.627 | 1.874 | 1.549 |
 
-### 层级分组分析
+### Layer Group Analysis
 
-| 层段 | α_attn | β_attn | α_mlp | β_mlp | 特征 |
-|------|--------|--------|-------|-------|------|
-| **浅层 (0-4)** | 1.045 | 0.505 | 1.037 | 0.739 | α > 1, 子层输出放大 |
-| **中浅层 (5-9)** | 0.973 | 0.634 | 0.967 | 0.798 | α ≈ 1, β_mlp 峰值 |
-| **中深层 (10-14)** | 0.943 | 0.759 | 0.944 | 0.700 | 渐进衰减 |
-| **深层 (15-19)** | 0.884 | **0.843** | 0.902 | 0.636 | α < 1, β_attn 最高 |
+| Layer Group | α_attn | β_attn | α_mlp | β_mlp | Characteristics |
+|-------------|--------|--------|-------|-------|-----------------|
+| **Shallow (0-4)** | 1.045 | 0.505 | 1.037 | 0.739 | α > 1, amplify sublayer output |
+| **Mid-Shallow (5-9)** | 0.973 | 0.634 | 0.967 | 0.798 | α ≈ 1, β_mlp peaks |
+| **Mid-Deep (10-14)** | 0.943 | 0.759 | 0.944 | 0.700 | Gradual decay |
+| **Deep (15-19)** | 0.884 | **0.843** | 0.902 | 0.636 | α < 1, β_attn highest |
 
-### 峰值位置
+### Peak Positions
 
-| 指标 | 峰值层 | 峰值 | 相对位置 |
-|------|--------|------|----------|
-| β_attn | Layer 19 | 1.049 | 最后一层 (95%) |
-| β_mlp | Layer 4 | 0.864 | 浅层 (20%) |
+| Metric | Peak Layer | Peak Value | Relative Position |
+|--------|------------|------------|-------------------|
+| β_attn | Layer 19 | 1.049 | Last layer (95%) |
+| β_mlp | Layer 4 | 0.864 | Shallow (20%) |
 
 ---
 
-## 📈 关键发现
+## Key Findings
 
-### 1. α 从浅到深递减
+### 1. α Decreases from Shallow to Deep
 
 ```
-浅层 α ≈ 1.04  →  深层 α ≈ 0.89
+Shallow α ≈ 1.04  →  Deep α ≈ 0.89
 ```
 
-**解释**: 浅层需要"放大"子层输出来建立特征，深层需要"抑制"避免过拟合。
+**Interpretation**: Shallow layers need to "amplify" sublayer output to build features; deep layers need to "suppress" to prevent overfitting.
 
-### 2. β_attn 在最深层达到峰值
+### 2. β_attn Peaks at Deepest Layer
 
 ```
 Layer 0:  β_attn = 0.278
-Layer 19: β_attn = 1.049  ← 超过 1！
+Layer 19: β_attn = 1.049  ← exceeds 1!
 ```
 
-**解释**: 深层 Attention 容易不稳定，需要更强的残差连接来"锚定"原始输入。
+**Interpretation**: Deep attention is prone to instability and needs stronger residual connections to "anchor" the original input.
 
-### 3. β_mlp 在浅层达到峰值
+### 3. β_mlp Peaks in Shallow Layers
 
 ```
-Layer 4:  β_mlp = 0.864 ← 峰值
+Layer 4:  β_mlp = 0.864 ← peak
 Layer 19: β_mlp = 0.627
 ```
 
-**解释**: MLP 在浅层进行主要的特征变换，需要强残差保持信息；深层 MLP 更多是精调。
+**Interpretation**: MLP performs primary feature transformation in shallow layers, requiring strong residual to preserve information; deep MLP is more for fine-tuning.
 
-### 4. α + β 总和变化
+### 4. α + β Total Varies by Depth
 
-- 浅层 α + β ≈ 1.5-1.7 (信息扩张)
-- 中层 α + β ≈ 1.6-1.9 (信息峰值)
-- 深层 α + β ≈ 1.5-1.6 (信息收敛)
+- Shallow α + β ≈ 1.5-1.7 (information expansion)
+- Middle α + β ≈ 1.6-1.9 (information peak)
+- Deep α + β ≈ 1.5-1.6 (information convergence)
 
 ---
 
-## 🔬 与 11 层模型对比
+## Comparison with 11-Layer Model
 
-| 指标 | 11 层 | 20 层 | 变化 |
-|------|-------|-------|------|
-| β_attn 峰值位置 | Layer 7 (64%) | Layer 19 (95%) | 更靠后 |
-| β_mlp 峰值位置 | Layer 3 (27%) | Layer 4 (20%) | 相似 |
+| Metric | 11-Layer | 20-Layer | Change |
+|--------|----------|----------|--------|
+| β_attn peak position | Layer 7 (64%) | Layer 19 (95%) | Shifts deeper |
+| β_mlp peak position | Layer 3 (27%) | Layer 4 (20%) | Similar |
 | Val Loss | ~4.1 | 3.82 | -7% |
 | Val BPB | ~1.6 | 1.50 | -6% |
 
-**观察**: 随着深度增加，β_attn 峰值位置趋向更深层，符合"深层需要更强残差稳定性"的直觉。
+**Observation**: As depth increases, β_attn peak shifts toward deeper layers, consistent with "deeper layers need stronger residual stability" intuition.
 
 ---
 
-## 💡 对 Parameter Golf 的启示
+## Implications for Parameter Golf
 
-### 可应用的优化
+### Applicable Optimizations
 
-1. **层级差异化初始化**
+1. **Layer-wise Differentiated Initialization**
    ```python
-   # 浅层: α > 1, β < 0.5
-   # 深层: α < 1, β > 0.7
+   # Shallow: α > 1, β < 0.5
+   # Deep: α < 1, β > 0.7
    ```
 
-2. **固定最优 α/β** — 用学习到的值作为常数
+2. **Fixed Optimal α/β** — Use learned values as constants
    ```python
    alpha_schedule = [1.12, 1.07, 1.03, ..., 0.83]
    beta_schedule = [0.28, 0.38, 0.38, ..., 1.05]
    ```
 
-3. **分段策略** — 不同层使用不同残差策略
-   - 浅层: 标准残差 + α 放大
-   - 深层: 强化残差 (β > 1)
+3. **Segmented Strategy** — Different residual strategies per layer group
+   - Shallow: Standard residual + α amplification
+   - Deep: Enhanced residual (β > 1)
 
 ---
 
-## 📁 可视化
+## Visualizations
 
-### 20层模型完整分析
+### 20-Layer Model Complete Analysis
 ![MHC 20L Analysis](../mhc_deepseek_20L_analysis.png)
 
-### 11层 vs 20层对比
+### 11L vs 20L Comparison
 ![MHC Comparison](../mhc_11L_vs_20L_comparison.png)
 
-### 热力图视图
+### Heatmap View
 ![MHC Heatmap](../mhc_heatmap.png)
 
-生成代码: `python docs/plot_mhc_analysis.py`
+To regenerate: `python docs/plot_mhc_analysis.py`
 
 ---
 
-## 📚 参考
+## References
 
 - [DeepSeek-V3 Paper](https://arxiv.org/abs/2401.xxxxx)
-- 实验代码: `modal_mhc_v2.py`
-- 训练日志: `train_mhc_v2.log`
+- Training script: `modal_mhc_v2.py`
+- Training log: `train_mhc_v2.log`
 
 ---
 
-*实验日期: 2026-04-03*
+*Experiment date: 2026-04-03*
