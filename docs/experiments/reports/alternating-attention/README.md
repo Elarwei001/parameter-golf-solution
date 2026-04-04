@@ -12,6 +12,7 @@
 | [**Alt-A mHC-scratch**](2026-04-04_alt-a-mhc-scratch.md) | 2026-04-04 | **1.4777** | **-1.65%** | 🏆 最佳 |
 | [Sandwich MLP](2026-04-04_alt-a-mhc-sandwich.md) | 2026-04-04 | 1.4833 | -1.28% | ✅ 参数省23% |
 | [Front-loaded](2026-04-04_alt-a-mhc-front.md) | 2026-04-04 | 1.4918 | -0.71% | ⚠️ 深层过度压缩 |
+| [Sandwich + QAT](2026-04-04_sandwich-qat.md) | 2026-04-04 | 1.5350 | +2.16% | ❌ QAT 太激进 |
 
 ## 系列结论
 
