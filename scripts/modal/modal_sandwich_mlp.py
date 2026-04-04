@@ -44,6 +44,7 @@ data_volume = modal.Volume.from_name("parameter-golf-data", create_if_missing=Tr
 
 MLP_SCALES_UNIFORM = [3.0] * 20
 MLP_SCALES_SANDWICH = [3.0]*4 + [1.2]*13 + [3.0]*3  # 0-3: high, 4-16: low, 17-19: high
+MLP_SCALES_FRONT = [3.0]*4 + [1.2]*16  # 0-3: high, 4-19: low (no deep recovery)
 
 
 @app.function(
@@ -85,6 +86,8 @@ def train_sandwich(
 
     if style == "sandwich":
         mlp_scales = MLP_SCALES_SANDWICH
+    elif style == "front":
+        mlp_scales = MLP_SCALES_FRONT
     else:
         mlp_scales = MLP_SCALES_UNIFORM
 
@@ -444,7 +447,7 @@ def main(
     style: str = "uniform",
 ):
     """Run Sandwich MLP experiment. style='uniform' or 'sandwich'"""
-    assert style in ("uniform", "sandwich"), f"style must be 'uniform' or 'sandwich', got '{style}'"
+    assert style in ("uniform", "sandwich", "front"), f"style must be 'uniform', 'sandwich', or 'front', got '{style}'"
 
     result = train_sandwich.remote(style=style)
 
