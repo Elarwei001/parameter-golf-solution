@@ -127,7 +127,19 @@ See: `docs/logs/fp16_eval_20260404.log`
 | FP16 (QAT) | 3.9087 | 1.5365 | 45.59 MB |
 | Delta | +0.0078 | **+0.0030 (+0.20%)** | -50% |
 
-**Conclusion**: FP16 conversion costs only +0.20% BPB, negligible degradation. The QAT ternary weights are already low-precision; FP16 mainly affects mHC params, RMSNorm, and embedding.
+**Conclusion (全模型 FP16)**: FP16 转换整个模型只损失 +0.20% BPB，模型大小减半 (91.18 → 45.59 MB)。
+
+### Embedding-only FP16 Conversion
+
+See: `docs/logs/embedding_fp16_eval_20260404.log`
+
+| Format | Val Loss | Val BPB | Quantized Size |
+|--------|----------|---------|----------------|
+| FP32 embedding | 3.8949 | 1.5311 | 16.52 MB |
+| FP16 embedding | 3.9011 | 1.5336 | 10.23 MB |
+| Delta | +0.0062 | **+0.0024 (+0.16%)** | **-6.29 MB** |
+
+**Conclusion (Embedding FP16)**: 仅将 embedding 从 FP32 转为 FP16，损失仅 +0.16% BPB，但量化大小从 16.52MB 降至 10.23MB。这让 dim=384 模型轻松塞进 16MB 限制，并为升级到更大 dim (如 dim=478) 留出了 6.29MB 空间。
 
 ## Next Steps
 
