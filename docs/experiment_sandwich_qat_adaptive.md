@@ -3,6 +3,7 @@
 **Date**: 2026-04-04
 **App ID**: ap-6RAgmDfOfrU4jLslN7hJwv
 **Script**: `scripts/modal/modal_sandwich_qat.py`
+**Training Log**: `docs/logs/sandwich_qat_adaptive_20260404.log`
 
 ---
 
