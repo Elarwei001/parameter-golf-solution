@@ -110,6 +110,13 @@
 - **发现**: Embedding 精度对模型影响极小，可以安全用 FP16；为升级到更大 dim 留出空间
 - **详见**: records/2026-04-04_embedding-fp16/
 
+### Sandwich QAT 30L ⭐ 当前最佳 QAT
+- **改动**: 层数 20→30，其余不变（dim=384, Sandwich MLP, adaptive QAT）
+- **配置**: 31.82M params (ternary 28.65M + FP32 3.17M), 16 Global + 14 Local
+- **结果**: BPB **1.5215** (vs 20L QAT 1.5321, **-0.69%**)
+- **发现**: 加深层数有效！30L 比 20L 奮 0.0106 BPB；但 QAT 退化仍是主要瓶颈（vs FP32 baseline +1.27%）；训练时间 2439s (+46%)
+- **详见**: records/2026-04-04_sandwich-qat-30l/
+
 ---
 
 ## 历史实验 (2026-03-31 / 04-01)
