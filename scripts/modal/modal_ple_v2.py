@@ -59,6 +59,7 @@ def train_ple(
     VOCAB_SIZE = 8192
     DATA_DIR = "/data/datasets/fineweb10B_sp8192"
     HEADER_SIZE = 256 * 4
+    BYTES_PER_TOKEN = 3.67
     
     print("="*70)
     print(f"PLE 实验: 每层注入 token embedding")
@@ -320,7 +321,7 @@ def train_ple(
             val_losses.append(loss.item())
     
     val_loss = sum(val_losses) / len(val_losses)
-    val_bpb = val_loss / math.log(2)
+    val_bpb = (val_loss / math.log(2)) * (1.0 / BYTES_PER_TOKEN)
     
     print("\n" + "="*70)
     print("🏆 结果 (PLE)")
