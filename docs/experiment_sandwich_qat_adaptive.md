@@ -73,7 +73,8 @@ Test whether a **warm-start (adaptive) QAT** strategy improves over training wit
 
 ## mHC Parameter Evolution
 
-See: `docs/mhc_3d_evolution_adaptive_qat.png`
+See: `docs/mhc_3d_evolution_adaptive_qat.png` (4 surfaces in 1 plot)
+See: `docs/mhc_3d_evolution_4panels.png` (4 separate subplots — recommended)
 
 ### Final mHC Parameters (Step 5000)
 
@@ -92,6 +93,16 @@ See: `docs/mhc_3d_evolution_adaptive_qat.png`
 - Layer 0 has unique behavior: high α (preserves input), low β (weak attention) — first layer acts as a passthrough
 - Deeper layers show monotonic decrease in all parameters
 - β values (sublayer scaling) are consistently lower than α values (residual scaling)
+
+### 3D Parameter Evolution (4-panel view)
+
+![](mhc_3d_evolution_4panels.png)
+
+**Key observations from 3D evolution**:
+- **α_attn**: Layer 0 starts high (~1.33) and gradually decreases to ~1.25. Other layers remain flat around 0.95-1.0
+- **β_attn**: Most volatile parameter. Layer 0 drops sharply (0.24→0.18), Layer 7 has a persistent spike (~1.07). Generally decreases with depth
+- **α_mlp**: Similar to α_attn — Layer 0 elevated (~1.27), rest flat around 0.96-1.0, slight decrease toward deeper layers
+- **β_mlp**: Smoothest monotonic decline across all layers, from ~0.95 (shallow) to ~0.63 (deep). The most "structured" parameter
 
 ---
 
