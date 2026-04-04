@@ -6,7 +6,7 @@
 |------|------|
 | 实验名称 | Alt-A Vanilla (Alternating Attention without mHC) |
 | 实验目的 | 验证 Alternating Attention（Local+Global 交替）是否能在相同配置下保持 baseline 性能 |
-| 假设 | Local attention 计算量更小，通过 Local+Global 交替，可以在相同参数量下达到接近全 Global 的效果 |
+| 假设 | 不同层学习不同模式：Local 层专注局部上下文，Global 层负责全局语义理解，分工协作可能更高效 |
 | 配置 | 20 layers, dim=384, 11 Global + 9 Local, window=128 |
 | 开始时间 | 2026-04-03 21:36 SGT |
 | 结束时间 | 2026-04-03 22:06 SGT |
@@ -67,10 +67,25 @@ Layer 19: Global (最后一层强制 Global)
 ### 4.3 新发现
 - **Local+Global 交替是可行的**：不需要每层都做全局 attention
 - **window=128 足够**：对于 seq_len=256，128 的窗口已经覆盖一半上下文
+- **层级分工**：Local 层学局部模式（n-gram 级别），Global 层学全局语义
 
-### 4.4 潜在优化
-- 既然 Local 层省计算，可以尝试**加大 dim**（Alt-B 实验）
-- 或者**加深层数**，用省下的计算量换更多层
+### 4.4 关于计算量的澄清
+
+⚠️ **注意**：当前实现并没有真正省计算量！
+
+```python
+# 当前实现：先全算，再 mask
+scores = torch.matmul(q, k.T)  # 全量计算
+scores = scores.masked_fill(window_mask, -inf)  # 之后才 mask
+```
+
+对于 seq_len=256 这样小的序列，这完全没问题。真正的稀疏计算需要 FlashAttention，但对我们的规模没必要。
+
+**Alt-A 的真正价值**：不是“省计算换更大 dim”，而是“层级分工学不同模式”。
+
+### 4.5 潜在优化
+- 尝试**加大 dim**（Alt-B 实验），看是否能提升性能
+- 或者**加深层数**，增加模型容量
 
 ## 5. 结论
 
