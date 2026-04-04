@@ -99,7 +99,6 @@ def train_alternating(
     local_window: int = 128,  # Local attention window size
     # Mode selection
     use_mhc: bool = False,  # Whether to use learned mHC parameters
-    mhc_scratch: bool = False,  # If True, learn mHC params from scratch (init to 1.0)
     # Training params
     lr: float = 1e-3,
     batch_size: int = 64,
@@ -258,7 +257,7 @@ def train_alternating(
             return self.w2(h)
     
     class AlternatingBlock(nn.Module):
-        def __init__(self, dim, n_heads, n_kv_heads, local_window, layer_idx, n_layers, use_mhc=False, mhc_scratch=False):
+        def __init__(self, dim, n_heads, n_kv_heads, local_window, layer_idx, n_layers, use_mhc=False):
             super().__init__()
             self.layer_idx = layer_idx
             
@@ -276,15 +275,13 @@ def train_alternating(
             
             # mHC parameters
             self.use_mhc = use_mhc
-            if use_mhc and not mhc_scratch and layer_idx < len(MHC_PARAMS_20L):
-                # Initialize from pre-trained mHC params (transferred from all-Global model)
+            if use_mhc and layer_idx < len(MHC_PARAMS_20L):
                 params = MHC_PARAMS_20L[layer_idx]
                 self.alpha_attn = nn.Parameter(torch.tensor([params["alpha_attn"]]))
                 self.beta_attn = nn.Parameter(torch.tensor([params["beta_attn"]]))
                 self.alpha_mlp = nn.Parameter(torch.tensor([params["alpha_mlp"]]))
                 self.beta_mlp = nn.Parameter(torch.tensor([params["beta_mlp"]]))
             else:
-                # Initialize to 1.0 (standard residual), will be learned during training
                 self.alpha_attn = nn.Parameter(torch.ones(1))
                 self.beta_attn = nn.Parameter(torch.ones(1))
                 self.alpha_mlp = nn.Parameter(torch.ones(1))
@@ -305,11 +302,11 @@ def train_alternating(
             return x
     
     class AlternatingTransformer(nn.Module):
-        def __init__(self, vocab_size, dim, n_layers, n_heads, n_kv_heads, local_window, use_mhc, mhc_scratch=False):
+        def __init__(self, vocab_size, dim, n_layers, n_heads, n_kv_heads, local_window, use_mhc):
             super().__init__()
             self.embed = nn.Embedding(vocab_size, dim)
             self.blocks = nn.ModuleList([
-                AlternatingBlock(dim, n_heads, n_kv_heads, local_window, i, n_layers, use_mhc, mhc_scratch)
+                AlternatingBlock(dim, n_heads, n_kv_heads, local_window, i, n_layers, use_mhc)
                 for i in range(n_layers)
             ])
             self.ln_f = RMSNorm(dim)
@@ -338,7 +335,6 @@ def train_alternating(
         n_kv_heads=n_kv_heads,
         local_window=local_window,
         use_mhc=use_mhc,
-        mhc_scratch=mhc_scratch,
     ).to(device)
     
     # Count parameters
@@ -473,7 +469,6 @@ def train_alternating(
 @app.local_entrypoint()
 def main(
     mhc: bool = False,
-    mhc_scratch: bool = False,
     dim: int = 384,
     n_layers: int = 20,
     local_window: int = 128,
@@ -484,19 +479,13 @@ def main(
     
     Args:
         mhc: Use learned mHC parameters
-        mhc_scratch: If True, learn mHC from scratch (init to 1.0) instead of using pre-trained values
         dim: Model dimension (default: 384)
         n_layers: Number of layers (default: 20)
         local_window: Local attention window (default: 128)
         steps: Training steps (default: 5000)
         resume: Path to checkpoint to resume from
     """
-    if mhc_scratch:
-        mode = "mHC-scratch"
-    elif mhc:
-        mode = "mHC"
-    else:
-        mode = "Vanilla"
+    mode = "mHC" if mhc else "Vanilla"
     print(f"\n[START] Alternating Attention Experiment")
     print(f"   Mode: {mode}, dim={dim}, layers={n_layers}, window={local_window}")
     
@@ -506,8 +495,7 @@ def main(
         n_heads=8,
         n_kv_heads=4,
         local_window=local_window,
-        use_mhc=mhc or mhc_scratch,
-        mhc_scratch=mhc_scratch,
+        use_mhc=mhc,
         seed=42,
         steps=steps,
         resume_from=resume,
