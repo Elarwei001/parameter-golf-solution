@@ -725,8 +725,9 @@ parameter-golf-solution/
 | **Alt-A + mHC (迁移)** | 3.7860 | **1.4883** | **-0.95%** | ✅ |
 | **Alt-B (dim=448)** | 3.8036 | 1.4952 | **-0.49%** | ✅ |
 | **Alt-A mHC-scratch** | **3.7590** | **1.4777** | **-1.65%** | ✅✅ 最佳 |
+| **Sandwich MLP** | 3.7734 | 1.4833 | **-1.28%** | ✅ 参数省23% |
 
-**所有 Alternating Attention 实验都成功了！Alt-A mHC-scratch 是目前最佳结果。**
+**所有 Alternating Attention 实验都成功了！Alt-A mHC-scratch (Uniform) 仍是最佳。Sandwich 省 23% 参数仅劣化 0.38%。**
 
 ### Alt-A: Vanilla (dim=384, 20 layers)
 
@@ -793,6 +794,26 @@ parameter-golf-solution/
 - 使用 scratch 学到的 mHC 参数初始化
 
 **目的**：验证 Sandwich MLP 是否能在保持性能的同时减少参数量
+
+### Sandwich MLP vs Uniform (2026-04-04)
+
+**配置**：
+- Uniform: 所有层 MLP hidden = dim*3 (1152)
+- Sandwich: 层 0-3 MLP 3× (1152), 层 4-16 MLP 1.2× (460), 层 17-19 MLP 3× (1152)
+- 两者都使用 Alternating Attention + mHC (from scratch)
+
+**结果**：
+
+| 配置 | Params | Val BPB | vs Baseline |
+|------|--------|---------|-------------|
+| Uniform | 29.70M | **1.4777** | **-1.65%** |
+| Sandwich | **22.79M** | 1.4833 | -1.28% |
+
+**分析**：Sandwich 省 23% 参数，仅劣化 0.38%。配合 QAT 量化，Sandwich 方案可能更有优势——同样 16MB 限制下可以用更大的 dim。
+
+mHC 参数方面，Sandwich 的 β_mlp 更平缓，没有 Uniform 的 V 形模式。深层 β_mlp 持续下降，暗示深层 MLP 可能不需要那么大。
+
+详见：[Sandwich MLP 报告](reports/alternating-attention/2026-04-04_alt-a-mhc-sandwich.md)
 
 ### TODO: Alt-C (FlashAttention + 长上下文)
 
