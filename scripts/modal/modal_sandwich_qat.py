@@ -58,7 +58,10 @@ def train_sandwich_qat(
     seq_len: int = 256,
     steps: int = 5000,
     warmup_steps: int = 500,
-    qat_start_step: int = 0,  # QAT from the beginning
+    qat_start_step: int = -1,  # -1 = auto (adaptive), 0 = from start, >0 = fixed step
+    qat_warmup_steps: int = 500,  # min FP32 steps before auto-switch
+    loss_ema_alpha: float = 0.99,  # EMA smoothing for loss tracking
+    qat_switch_threshold: float = 0.001,  # switch when loss_rate < this
 ):
     """Train Sandwich MLP + QAT + mHC (from scratch)."""
     import torch
@@ -83,7 +86,7 @@ def train_sandwich_qat(
     print("Sandwich MLP + QAT + mHC (from scratch)")
     print(f"  dim={dim}, layers={n_layers}")
     print(f"  MLP scales: {mlp_scales}")
-    print(f"  QAT: Ternary (1.58-bit) from step {qat_start_step}")
+    print(f"  QAT: Ternary (1.58-bit), mode={'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'}")
     print(f"  mHC: FP32, init to 1.0, learned from scratch")
     print("=" * 70)
 
@@ -401,14 +404,21 @@ def train_sandwich_qat(
     # Track mHC evolution
     mhc_history = []
 
-    print(f"\n[TRAIN] Starting training ({steps} steps, QAT from step {qat_start_step})...\n")
+    print(f"\n[TRAIN] Starting training ({steps} steps, QAT mode={'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'})...\n")
     start_time = time.time()
 
+    # Adaptive QAT switching state
+    qat_enabled = (qat_start_step == 0)  # only True if explicitly from step 0
+    ema_loss = None
+    qat_actual_step = None  # record when QAT was actually enabled
+
     for step in range(1, steps + 1):
-        # Enable QAT at specified step
-        if step == qat_start_step and qat_start_step > 0:
+        # Enable QAT at specified fixed step
+        if not qat_enabled and qat_start_step > 0 and step == qat_start_step:
             model.enable_qat()
-            print(f"\n[QAT] Enabled at step {step}\n")
+            qat_enabled = True
+            qat_actual_step = step
+            print(f"\n[QAT] Enabled at fixed step {step}\n")
 
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr * cosine_lr(step)
@@ -421,10 +431,32 @@ def train_sandwich_qat(
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
+        # Adaptive QAT switching: check loss convergence
+        if not qat_enabled and qat_start_step == -1:
+            current_loss = loss.item()
+            if ema_loss is None:
+                ema_loss = current_loss
+            else:
+                ema_loss_prev = ema_loss
+                ema_loss = loss_ema_alpha * ema_loss + (1 - loss_ema_alpha) * current_loss
+
+                # Only consider switching after minimum warmup
+                if step >= qat_warmup_steps:
+                    loss_rate = (ema_loss_prev - ema_loss) / ema_loss_prev
+                    if loss_rate < qat_switch_threshold:
+                        model.enable_qat()
+                        qat_enabled = True
+                        qat_actual_step = step
+                        print(f"\n[QAT] Adaptive switch at step {step}!")
+                        print(f"  EMA Loss: {ema_loss:.4f}")
+                        print(f"  Loss rate: {loss_rate:.6f} < threshold {qat_switch_threshold}")
+                        print(f"  FP32 trained for {step} steps, QAT will run for {steps - step} steps\n")
+
         if step % 500 == 0:
             elapsed = time.time() - start_time
             current_lr = optimizer.param_groups[0]['lr']
-            print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {current_lr:.2e} | Time {elapsed:.0f}s")
+            qat_status = "QAT" if qat_enabled else "FP32"
+            print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {current_lr:.2e} | {qat_status} | Time {elapsed:.0f}s")
 
         # Log mHC params every 1000 steps
         if step % 1000 == 0:
@@ -476,12 +508,20 @@ def train_sandwich_qat(
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     results = {
-        'style': 'sandwich_qat',
+        'style': 'sandwich_qat_adaptive',
         'config': {
             'dim': dim, 'n_layers': n_layers, 'n_heads': n_heads,
             'n_kv_heads': n_kv_heads, 'local_window': local_window,
             'steps': steps, 'lr': lr, 'batch_size': batch_size, 'seq_len': seq_len,
             'mlp_scales': mlp_scales, 'qat_start_step': qat_start_step,
+            'qat_actual_step': qat_actual_step,
+            'qat_switch_threshold': qat_switch_threshold,
+            'loss_ema_alpha': loss_ema_alpha,
+            'qat_warmup_steps': qat_warmup_steps,
+            'qat_actual_step': qat_actual_step,
+            'qat_switch_threshold': qat_switch_threshold,
+            'loss_ema_alpha': loss_ema_alpha,
+            'qat_warmup_steps': qat_warmup_steps,
         },
         'val_loss': val_loss,
         'val_bpb': val_bpb,
@@ -517,11 +557,19 @@ def train_sandwich_qat(
 
 
 @app.local_entrypoint()
-def main():
-    result = train_sandwich_qat.remote()
+def main(
+    qat_start_step: int = -1,  # -1 = auto, 0 = from start
+    qat_warmup_steps: int = 500,
+    qat_switch_threshold: float = 0.001,
+):
+    result = train_sandwich_qat.remote(
+        qat_start_step=qat_start_step,
+        qat_warmup_steps=qat_warmup_steps,
+        qat_switch_threshold=qat_switch_threshold,
+    )
 
     print(f"\n[FINAL] Sandwich MLP + QAT")
     print(f"  BPB: {result['val_bpb']:.4f}")
-    print(f"  Quantized Size: {result['quantized_size_mb']:.2f} MB")
     print(f"  vs Baseline (1.5025): {(result['val_bpb'] - 1.5025) / 1.5025 * 100:+.2f}%")
     print(f"  vs Sandwich FP32 (1.4833): {(result['val_bpb'] - 1.4833) / 1.4833 * 100:+.2f}%")
+    print(f"  QAT switched at step: {result.get('qat_actual_step', 'N/A')}")
