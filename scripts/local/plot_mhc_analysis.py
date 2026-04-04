@@ -363,6 +363,105 @@ def plot_32L_analysis():
     plt.close()
 
 
+def plot_20L_vs_32L_absolute():
+    """生成 20L vs 32L 绝对层数对比图（不拉伸横轴）"""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('20L vs 32L Comparison (Absolute Layer Scale)', 
+                 fontsize=14, fontweight='bold')
+    
+    layers_20 = np.array(data_20L['layer'])
+    layers_32 = np.array(data_32L['layer'])
+    
+    # Common x-axis: 0-31
+    x_max = 32
+    
+    # ===== Plot 1: α_attn =====
+    ax1 = axes[0, 0]
+    ax1.plot(layers_20, data_20L['alpha_attn'], 'o-', color='#2196F3', 
+             linewidth=2, markersize=6, label='20L', alpha=0.8)
+    ax1.plot(layers_32, data_32L['alpha_attn'], 's-', color='#E91E63', 
+             linewidth=2, markersize=4, label='32L', alpha=0.8)
+    ax1.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5)
+    ax1.set_xlabel('Layer')
+    ax1.set_ylabel('α_attn')
+    ax1.set_title('α_attn (Residual Weight)')
+    ax1.legend()
+    ax1.set_xlim(-0.5, x_max - 0.5)
+    ax1.set_ylim(0.8, 1.25)
+    ax1.grid(True, alpha=0.3)
+    # Mark where 20L ends
+    ax1.axvline(x=19, color='#2196F3', linestyle=':', alpha=0.5)
+    
+    # ===== Plot 2: β_attn =====
+    ax2 = axes[0, 1]
+    ax2.plot(layers_20, data_20L['beta_attn'], 'o-', color='#2196F3', 
+             linewidth=2, markersize=6, label='20L', alpha=0.8)
+    ax2.plot(layers_32, data_32L['beta_attn'], 's-', color='#E91E63', 
+             linewidth=2, markersize=4, label='32L', alpha=0.8)
+    ax2.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5)
+    ax2.set_xlabel('Layer')
+    ax2.set_ylabel('β_attn')
+    ax2.set_title('β_attn (Attention Output Weight)')
+    ax2.legend()
+    ax2.set_xlim(-0.5, x_max - 0.5)
+    ax2.set_ylim(0.2, 1.5)
+    ax2.grid(True, alpha=0.3)
+    ax2.axvline(x=19, color='#2196F3', linestyle=':', alpha=0.5)
+    # Highlight anomalies
+    ax2.scatter([19], [data_20L['beta_attn'][19]], s=150, color='#2196F3', 
+                zorder=5, edgecolor='white', linewidth=2, marker='*')
+    ax2.scatter([27], [data_32L['beta_attn'][27]], s=150, color='#E91E63', 
+                zorder=5, edgecolor='white', linewidth=2, marker='*')
+    ax2.annotate('20L peak\nL19', xy=(19, data_20L['beta_attn'][19]), 
+                 xytext=(15, 1.2), fontsize=9, color='#2196F3',
+                 arrowprops=dict(arrowstyle='->', color='#2196F3', alpha=0.7))
+    ax2.annotate('32L peak\nL27', xy=(27, data_32L['beta_attn'][27]), 
+                 xytext=(29, 1.2), fontsize=9, color='#E91E63',
+                 arrowprops=dict(arrowstyle='->', color='#E91E63', alpha=0.7))
+    
+    # ===== Plot 3: α_mlp =====
+    ax3 = axes[1, 0]
+    ax3.plot(layers_20, data_20L['alpha_mlp'], 'o-', color='#2196F3', 
+             linewidth=2, markersize=6, label='20L', alpha=0.8)
+    ax3.plot(layers_32, data_32L['alpha_mlp'], 's-', color='#E91E63', 
+             linewidth=2, markersize=4, label='32L', alpha=0.8)
+    ax3.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5)
+    ax3.set_xlabel('Layer')
+    ax3.set_ylabel('α_mlp')
+    ax3.set_title('α_mlp (MLP Residual Weight)')
+    ax3.legend()
+    ax3.set_xlim(-0.5, x_max - 0.5)
+    ax3.set_ylim(0.85, 1.2)
+    ax3.grid(True, alpha=0.3)
+    ax3.axvline(x=19, color='#2196F3', linestyle=':', alpha=0.5)
+    
+    # ===== Plot 4: β_mlp =====
+    ax4 = axes[1, 1]
+    ax4.plot(layers_20, data_20L['beta_mlp'], 'o-', color='#2196F3', 
+             linewidth=2, markersize=6, label='20L', alpha=0.8)
+    ax4.plot(layers_32, data_32L['beta_mlp'], 's-', color='#E91E63', 
+             linewidth=2, markersize=4, label='32L', alpha=0.8)
+    ax4.set_xlabel('Layer')
+    ax4.set_ylabel('β_mlp')
+    ax4.set_title('β_mlp (MLP Output Weight)')
+    ax4.legend()
+    ax4.set_xlim(-0.5, x_max - 0.5)
+    ax4.set_ylim(0.4, 1.0)
+    ax4.grid(True, alpha=0.3)
+    ax4.axvline(x=19, color='#2196F3', linestyle=':', alpha=0.5)
+    # Mark peaks
+    ax4.scatter([4], [data_20L['beta_mlp'][4]], s=100, color='#2196F3', 
+                zorder=5, edgecolor='white', linewidth=2, marker='*')
+    ax4.scatter([5], [data_32L['beta_mlp'][5]], s=100, color='#E91E63', 
+                zorder=5, edgecolor='white', linewidth=2, marker='*')
+    
+    plt.tight_layout()
+    plt.savefig('mhc_20L_vs_32L_absolute.png', dpi=150, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    print('Saved: mhc_20L_vs_32L_absolute.png')
+    plt.close()
+
+
 if __name__ == '__main__':
     print('Generating MHC analysis visualizations...\n')
     
@@ -370,9 +469,11 @@ if __name__ == '__main__':
     plot_comparison()
     plot_heatmap()
     plot_32L_analysis()
+    plot_20L_vs_32L_absolute()
     
     print('\nDone! Generated:')
     print('  - mhc_deepseek_20L_analysis.png')
     print('  - mhc_11L_vs_20L_comparison.png')
     print('  - mhc_heatmap.png')
     print('  - mhc_deepseek_32L_analysis.png')
+    print('  - mhc_20L_vs_32L_absolute.png')

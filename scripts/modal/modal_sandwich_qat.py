@@ -498,11 +498,16 @@ def train_sandwich_qat(
                         print(f"  Loss rate: {loss_rate:.6f} < threshold {qat_switch_threshold}")
                         print(f"  FP32 trained for {step} steps, QAT will run for {steps - step} steps\n")
 
-        if step % 500 == 0:
+        if step % 100 == 0:
             elapsed = time.time() - start_time
             current_lr = optimizer.param_groups[0]['lr']
             qat_status = "QAT" if qat_enabled else "FP32"
-            print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {current_lr:.2e} | {qat_status} | Time {elapsed:.0f}s")
+            ema_str = f" | EMA {ema_loss:.4f}" if ema_loss is not None else ""
+            rate_str = ""
+            if not qat_enabled and qat_start_step == -1 and step >= qat_warmup_steps and ema_loss is not None:
+                # Show loss_rate progress toward threshold
+                pass  # We'll compute below
+            print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {current_lr:.2e} | {qat_status}{ema_str} | Time {elapsed:.0f}s")
 
         # Log mHC params every 1000 steps
         if step % 1000 == 0:
