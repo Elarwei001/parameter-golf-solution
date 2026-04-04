@@ -62,6 +62,8 @@ def train_sandwich_qat(
     qat_warmup_steps: int = 2000,  # min FP32 steps before auto-switch
     loss_ema_alpha: float = 0.99,  # EMA smoothing for loss tracking
     qat_switch_threshold: float = 0.001,  # switch when loss_rate < this
+    resume_checkpoint: str = "",  # path to checkpoint in volume, e.g. "/data/checkpoints/sandwich_qat/sandwich_qat_step3000.pt"
+    checkpoint_every: int = 1000,  # save intermediate checkpoint every N steps
 ):
     """Train Sandwich MLP + QAT + mHC (from scratch)."""
     import torch
@@ -404,15 +406,59 @@ def train_sandwich_qat(
     # Track mHC evolution
     mhc_history = []
 
-    print(f"\n[TRAIN] Starting training ({steps} steps, QAT mode={'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'})...\n")
+    # Resume from checkpoint if specified
+    start_step = 0
+    qat_enabled = (qat_start_step == 0)
+    ema_loss = None
+    qat_actual_step = None
+    mhc_history = []
+
+    if resume_checkpoint:
+        print(f"\n[RESUME] Loading checkpoint: {resume_checkpoint}")
+        ckpt = torch.load(resume_checkpoint, map_location=device)
+        model.load_state_dict(ckpt['model_state_dict'])
+        optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+        start_step = ckpt['step']
+        mhc_history = ckpt.get('mhc_history', [])
+        qat_actual_step = ckpt.get('config', {}).get('qat_actual_step')
+        # If QAT was already enabled in checkpoint, keep it enabled
+        if qat_actual_step is not None and qat_actual_step <= start_step:
+            model.enable_qat()
+            qat_enabled = True
+            print(f"  Resumed from step {start_step}, QAT was enabled at step {qat_actual_step}")
+        else:
+            print(f"  Resumed from step {start_step}, QAT not yet enabled")
+        print(f"  Previous val BPB: {ckpt.get('val_bpb', 'N/A')}")
+
+    print(f"\n[TRAIN] Starting training from step {start_step+1} to {steps} (QAT mode={'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'})...\n")
     start_time = time.time()
 
-    # Adaptive QAT switching state
-    qat_enabled = (qat_start_step == 0)  # only True if explicitly from step 0
-    ema_loss = None
-    qat_actual_step = None  # record when QAT was actually enabled
+    def save_checkpoint(step, model, optimizer, qat_actual_step, mhc_history, qat_enabled):
+        """Save intermediate checkpoint to volume."""
+        ckpt_dir = "/data/checkpoints/sandwich_qat"
+        os.makedirs(ckpt_dir, exist_ok=True)
+        ckpt_path = os.path.join(ckpt_dir, f"sandwich_qat_step{step}.pt")
+        torch.save({
+            'step': step,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'qat_actual_step': qat_actual_step,
+            'qat_enabled': qat_enabled,
+            'mhc_history': mhc_history,
+            'config': {
+                'dim': dim, 'n_layers': n_layers, 'n_heads': n_heads,
+                'n_kv_heads': n_kv_heads, 'local_window': local_window,
+                'steps': steps, 'qat_start_step': qat_start_step,
+                'qat_warmup_steps': qat_warmup_steps,
+                'qat_switch_threshold': qat_switch_threshold,
+                'loss_ema_alpha': loss_ema_alpha,
+                'qat_actual_step': qat_actual_step,
+            },
+        }, ckpt_path)
+        data_volume.commit()
+        print(f"[CHECKPOINT] Saved step {step} to {ckpt_path}")
 
-    for step in range(1, steps + 1):
+    for step in range(start_step + 1, steps + 1):
         # Enable QAT at specified fixed step
         if not qat_enabled and qat_start_step > 0 and step == qat_start_step:
             model.enable_qat()
@@ -466,6 +512,9 @@ def train_sandwich_qat(
                 'params': [block.get_mhc_params() for block in model.blocks]
             }
             mhc_history.append(snapshot)
+            # Save intermediate checkpoint
+            if checkpoint_every > 0 and step % checkpoint_every == 0 and step < steps:
+                save_checkpoint(step, model, optimizer, qat_actual_step, mhc_history, qat_enabled)
 
     print(f"\nTraining completed: {time.time() - start_time:.0f}s")
 
@@ -561,11 +610,13 @@ def main(
     qat_start_step: int = -1,  # -1 = auto, 0 = from start
     qat_warmup_steps: int = 500,
     qat_switch_threshold: float = 0.001,
+    resume_checkpoint: str = "",  # e.g. "/data/checkpoints/sandwich_qat/sandwich_qat_step3000.pt"
 ):
     result = train_sandwich_qat.remote(
         qat_start_step=qat_start_step,
         qat_warmup_steps=qat_warmup_steps,
         qat_switch_threshold=qat_switch_threshold,
+        resume_checkpoint=resume_checkpoint,
     )
 
     print(f"\n[FINAL] Sandwich MLP + QAT")
