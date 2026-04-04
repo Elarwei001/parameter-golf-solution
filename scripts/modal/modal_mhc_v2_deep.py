@@ -258,11 +258,14 @@ def train_mhc_v2_deep(
     for step in range(1, steps + 1):
         model.train()
         
+        min_lr_ratio = 0.1  # Minimum LR = 10% of initial LR
+        
         if step < 100:
-            lr_mult = step / 100
+            lr_mult = step / 100  # Warmup
         else:
             progress = (step - 100) / (steps - 100)
-            lr_mult = 0.5 * (1 + math.cos(math.pi * progress))
+            # Cosine decay from 1.0 to min_lr_ratio
+            lr_mult = min_lr_ratio + 0.5 * (1 - min_lr_ratio) * (1 + math.cos(math.pi * progress))
         
         for pg in opt.param_groups:
             pg['lr'] = lr * lr_mult
