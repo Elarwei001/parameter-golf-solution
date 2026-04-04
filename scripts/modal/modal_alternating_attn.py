@@ -17,6 +17,7 @@ uniform Global attention across all layers.
 - Alt-A + mHC: dim=384 + mHC parameter initialization
 - Alt-B: dim=448 (larger), verify larger dim improves performance with Alternating
 - Alt-B + mHC: dim=448 + mHC parameter initialization (requires Alternating-specific mHC)
+- Alt-C: FlashAttention + Alternating + seq_len=1024 (true sparse compute for longer context)
 
 ## Run
 ```bash
