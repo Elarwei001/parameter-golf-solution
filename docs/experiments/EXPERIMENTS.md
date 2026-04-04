@@ -738,3 +738,36 @@ Alternating Attention 只比 baseline 差 0.6%，几乎持平！而且 Local lay
 
 **下一步**：跑 Alt-A + mHC 版本
 
+### Alt-A + mHC: dim=384, 20 layers, mHC 参数初始化
+
+**配置**：
+| 配置 | 值 |
+|------|------|
+| Layers | 20 |
+| Dim | 384 |
+| Global layers | 11 |
+| Local layers | 9 (window=128) |
+| Params | 29.70M |
+| Steps | 5000 |
+| mHC | 使用全 Global 模型学到的 α/β 参数 |
+
+**结果**：
+
+| 指标 | Alt-A + mHC | Alt-A (Vanilla) | Baseline |
+|------|-------------|-----------------|----------|
+| Val Loss | 3.7860 | 1.0475 | 1.0411 |
+| Val BPB | **5.4621** ❌ | 1.5112 | 1.5025 |
+
+**分析**：
+mHC 版本 BPB 爆炸！原因是 mHC 参数是从**全 Global attention** 模型学到的，直接套用到 **Alternating (Local+Global)** 架构不匹配。Local 层和 Global 层的 α/β 不应该用相同的值。
+
+**结论**：
+- Alt-A Vanilla (BPB 1.5112) 有效 ✅
+- Alt-A + mHC 不能直接复用全 Global 模型的参数 ❌
+
+### TODO: Alternating Attention 专用 mHC
+
+待实验：用 Alternating Attention 架构训练一个新的 mHC 模型，让它学习 Local 层和 Global 层各自的 α/β 参数，然后用这些参数来初始化。
+
+预期：Local 层和 Global 层可能有不同的最优 α/β 分布。
+
