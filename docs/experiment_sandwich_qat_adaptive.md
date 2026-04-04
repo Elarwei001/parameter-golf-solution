@@ -131,7 +131,10 @@ See: `docs/logs/fp16_eval_20260404.log`
 
 ## Next Steps
 
+- [ ] **FP16 embedding + QAT ternary 实验** — embedding 从 FP32 转成 FP16，可省 ~6MB，让 dim=478 的 45M 参数模型塞进 16MB
+  - Sandwich (384): 16.52MB → 10.20MB ✅
+  - Sandwich (512): → 15.33MB ✅
+  - **dim=478, 20L, 45M params → 15.98MB ✅** (推荐方案)
 - [ ] Try longer warmup (1000, 2000 steps) before QAT switch
-- [ ] Reduce model size to fit 16MB budget
-- [ ] Consider mixed-precision: keep more layers in FP32, fewer in ternary
+- [ ] Mixed-precision: FP16 embedding + ternary QAT weights
 - [ ] Compare with post-training quantization (train FP32, then quantize)
