@@ -59,7 +59,7 @@ def train_sandwich_qat(
     steps: int = 5000,
     warmup_steps: int = 500,
     qat_start_step: int = -1,  # -1 = auto (adaptive), 0 = from start, >0 = fixed step
-    qat_warmup_steps: int = 500,  # min FP32 steps before auto-switch
+    qat_warmup_steps: int = 2000,  # min FP32 steps before auto-switch
     loss_ema_alpha: float = 0.99,  # EMA smoothing for loss tracking
     qat_switch_threshold: float = 0.001,  # switch when loss_rate < this
 ):
