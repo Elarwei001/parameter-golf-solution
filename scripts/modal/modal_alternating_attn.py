@@ -373,11 +373,14 @@ def train_alternating(
         y = torch.stack([data[i+1:i+seq_len+1] for i in ix]).long().to(device)
         return x, y
     
+    min_lr_ratio = 0.1  # Minimum LR = 10% of initial LR
+    
     def cosine_lr(step):
         if step < 200:
-            return step / 200
+            return step / 200  # Warmup
         progress = (step - 200) / (steps - 200)
-        return 0.5 * (1 + math.cos(math.pi * progress))
+        # Cosine decay from 1.0 to min_lr_ratio
+        return min_lr_ratio + 0.5 * (1 - min_lr_ratio) * (1 + math.cos(math.pi * progress))
     
     # Checkpoint directory
     checkpoint_dir = "/data/checkpoints/alternating_attn"
