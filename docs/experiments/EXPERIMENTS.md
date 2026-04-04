@@ -813,6 +813,17 @@ parameter-golf-solution/
 
 mHC 参数方面，Sandwich 的 β_mlp 更平缓，没有 Uniform 的 V 形模式。深层 β_mlp 持续下降，暗示深层 MLP 可能不需要那么大。
 
+**有趣发现：Sandwich 自证“深层 MLP 可能不需要大”**
+
+Uniform 模型的 β_mlp 呈 V 形（浅层高→中段低→深层回升），这正是我们设计 Sandwich（大-小-大）的依据。但 Sandwich 模型自身的 β_mlp 却持续下降到 0.618，没有回升。
+
+这意味着：
+1. Sandwich 的“深层大 MLP”配置可能是过度配置——模型自己通过 β_mlp 告诉我们深层不需要那么多 MLP 容量
+2. 更激进的 Sandwich（只保留浅层大 MLP）可能效果接近，且参数更省
+3. 这是一个**自洽性悖论**：基于 Uniform 的 mHC 观察设计 Sandwich，但 Sandwich 学到的 mHC 模式不同
+
+这值得做一个后续实验验证：把深层 3× 也降到 1.2×，看 BPB 是否进一步劣化。
+
 详见：[Sandwich MLP 报告](reports/alternating-attention/2026-04-04_alt-a-mhc-sandwich.md)
 
 ### TODO: Alt-C (FlashAttention + 长上下文)
