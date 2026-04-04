@@ -722,10 +722,11 @@ parameter-golf-solution/
 |------|----------|---------|-------------|------|
 | Baseline (mHC 20L) | 3.8222 | 1.5025 | - | - |
 | **Alt-A (Vanilla)** | 3.8161 | 1.5001 | **-0.16%** | ✅ |
-| **Alt-A + mHC** | 3.7860 | **1.4883** | **-0.95%** | ✅✅ 最佳 |
+| **Alt-A + mHC (迁移)** | 3.7860 | **1.4883** | **-0.95%** | ✅ |
 | **Alt-B (dim=448)** | 3.8036 | 1.4952 | **-0.49%** | ✅ |
+| **Alt-A mHC-scratch** | **3.7590** | **1.4777** | **-1.65%** | ✅✅ 最佳 |
 
-**所有 Alternating Attention 实验都成功了！Alt-A + mHC 是目前最佳结果。**
+**所有 Alternating Attention 实验都成功了！Alt-A mHC-scratch 是目前最佳结果。**
 
 ### Alt-A: Vanilla (dim=384, 20 layers)
 
@@ -776,11 +777,22 @@ parameter-golf-solution/
 
 **分析**：加大 dim 有效，但效率不高（参数 +21%，BPB 只提升 0.49%）。Alt-A + mHC 更优。
 
-### TODO: Alternating Attention 专用 mHC
+### DONE: Alt-A mHC-scratch (2026-04-04)
 
-待实验：用 Alternating Attention 架构训练一个新的 mHC 模型，让它学习 Local 层和 Global 层各自的 α/β 参数，然后用这些参数来初始化。
+已完成：在 Alternating Attention 架构下从头学习 mHC 参数，BPB **1.4777** (-1.65%)，所有实验中最佳！
 
-预期：Local 层和 Global 层可能有不同的最优 α/β 分布。
+**学到的 mHC 参数将作为后续 Sandwich MLP 实验的基线 (Alt-A-mHC-Uniform)。**
+
+### TODO: Sandwich MLP 对比 (Uniform vs Sandwich)
+
+**基线**：Alt-A mHC-scratch, BPB 1.4777, Uniform MLP (all 3x)
+
+**实验设计**：
+- Sandwich: Layer 0-3 MLP 3x, Layer 4-16 MLP 1.2x, Layer 17-19 MLP 3x
+- 其他参数完全相同
+- 使用 scratch 学到的 mHC 参数初始化
+
+**目的**：验证 Sandwich MLP 是否能在保持性能的同时减少参数量
 
 ### TODO: Alt-C (FlashAttention + 长上下文)
 
