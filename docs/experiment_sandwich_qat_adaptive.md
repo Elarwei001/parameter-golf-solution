@@ -117,6 +117,18 @@ See: `docs/mhc_3d_evolution_4panels.png` (4 separate subplots — recommended)
    - Using a stricter convergence criterion (e.g., 3 consecutive checks below threshold)
 4. **Model size issue**: 16.52 MB exceeds the 16MB budget — need to reduce params or increase quantization
 
+## FP16 Post-Training Conversion
+
+See: `docs/logs/fp16_eval_20260404.log`
+
+| Format | Val Loss | Val BPB | Model Size |
+|--------|----------|---------|------------|
+| FP32 (QAT) | 3.9009 | 1.5335 | 91.18 MB |
+| FP16 (QAT) | 3.9087 | 1.5365 | 45.59 MB |
+| Delta | +0.0078 | **+0.0030 (+0.20%)** | -50% |
+
+**Conclusion**: FP16 conversion costs only +0.20% BPB, negligible degradation. The QAT ternary weights are already low-precision; FP16 mainly affects mHC params, RMSNorm, and embedding.
+
 ## Next Steps
 
 - [ ] Try longer warmup (1000, 2000 steps) before QAT switch
