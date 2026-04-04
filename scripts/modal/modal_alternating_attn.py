@@ -8,14 +8,15 @@ Alternating Attention Experiment
 - Inspired by: Gemma 3n / gamma4's suggestion
 
 ## Hypothesis
-Local attention has lower compute cost. By alternating Local+Global, we can use
-larger models at the same compute budget.
+Different layers learn different patterns: Local layers focus on local context (n-gram level),
+Global layers handle global semantics. This layer specialization may be more efficient than
+uniform Global attention across all layers.
 
 ## Experiment Design
 - Alt-A: dim=384 (same as baseline), verify Alternating doesn't hurt
 - Alt-A + mHC: dim=384 + mHC parameter initialization
-- Alt-B: dim=448 (larger), verify saved compute can be traded for larger dim
-- Alt-B + mHC: dim=448 + mHC parameter initialization
+- Alt-B: dim=448 (larger), verify larger dim improves performance with Alternating
+- Alt-B + mHC: dim=448 + mHC parameter initialization (requires Alternating-specific mHC)
 
 ## Run
 ```bash
