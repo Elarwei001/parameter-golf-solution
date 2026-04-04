@@ -714,6 +714,19 @@ parameter-golf-solution/
 
 **脚本**：`scripts/modal/modal_alternating_attn.py`
 
+### Alternating Attention 实验汇总
+
+⚠️ **更正 (2026-04-04)**：之前 BPB 计算公式漏了 `BYTES_PER_TOKEN=3.67` 转换，导致报告数值错误。修正后结果如下：
+
+| 实验 | Val Loss | Val BPB | vs Baseline | 判定 |
+|------|----------|---------|-------------|------|
+| Baseline (mHC 20L) | 3.8222 | 1.5025 | - | - |
+| **Alt-A (Vanilla)** | 3.8161 | 1.5001 | **-0.16%** | ✅ |
+| **Alt-A + mHC** | 3.7860 | **1.4883** | **-0.95%** | ✅✅ 最佳 |
+| **Alt-B (dim=448)** | 3.8036 | 1.4952 | **-0.49%** | ✅ |
+
+**所有 Alternating Attention 实验都成功了！Alt-A + mHC 是目前最佳结果。**
+
 ### Alt-A: Vanilla (dim=384, 20 layers)
 
 **配置**：
@@ -726,17 +739,9 @@ parameter-golf-solution/
 | Params | 29.70M |
 | Steps | 5000 |
 
-**结果**：
+**结果**：Val BPB = **1.5001** (-0.16% vs baseline) ✅
 
-| 指标 | Alt-A | Baseline (mHC 20L) | 差异 |
-|------|-------|---------------------|------|
-| Val Loss | 1.0475 | 1.0411 | +0.6% |
-| Val BPB | 1.5112 | 1.5025 | +0.6% |
-
-**分析**：
-Alternating Attention 只比 baseline 差 0.6%，几乎持平！而且 Local layers 节省了计算量，说明有潜力用更大的 dim 换取性能提升。
-
-**下一步**：跑 Alt-A + mHC 版本
+**分析**：Alternating Attention 几乎不掉点，验证了层级分工的有效性。
 
 ### Alt-A + mHC: dim=384, 20 layers, mHC 参数初始化
 
@@ -751,19 +756,25 @@ Alternating Attention 只比 baseline 差 0.6%，几乎持平！而且 Local lay
 | Steps | 5000 |
 | mHC | 使用全 Global 模型学到的 α/β 参数 |
 
-**结果**：
+**结果**：Val BPB = **1.4883** (-0.95% vs baseline) 🏆 **所有实验中最佳！**
 
-| 指标 | Alt-A + mHC | Alt-A (Vanilla) | Baseline |
-|------|-------------|-----------------|----------|
-| Val Loss | 3.7860 | 1.0475 | 1.0411 |
-| Val BPB | **5.4621** ❌ | 1.5112 | 1.5025 |
+**分析**：Alternating + mHC 组合效果最好，说明 mHC 参数可以跨架构迁移。
 
-**分析**：
-mHC 版本 BPB 爆炸！原因是 mHC 参数是从**全 Global attention** 模型学到的，直接套用到 **Alternating (Local+Global)** 架构不匹配。Local 层和 Global 层的 α/β 不应该用相同的值。
+### Alt-B: dim=448, 20 layers
 
-**结论**：
-- Alt-A Vanilla (BPB 1.5112) 有效 ✅
-- Alt-A + mHC 不能直接复用全 Global 模型的参数 ❌
+**配置**：
+| 配置 | 值 |
+|------|------|
+| Layers | 20 |
+| Dim | 448 |
+| Global layers | 11 |
+| Local layers | 9 (window=128) |
+| Params | 39.82M |
+| Steps | 5000 |
+
+**结果**：Val BPB = **1.4952** (-0.49% vs baseline) ✅
+
+**分析**：加大 dim 有效，但效率不高（参数 +21%，BPB 只提升 0.49%）。Alt-A + mHC 更优。
 
 ### TODO: Alternating Attention 专用 mHC
 

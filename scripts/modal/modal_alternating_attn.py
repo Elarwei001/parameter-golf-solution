@@ -122,6 +122,7 @@ def train_alternating(
     VOCAB_SIZE = 8192
     DATA_DIR = "/data/datasets/fineweb10B_sp8192"
     HEADER_SIZE = 256 * 4
+    BYTES_PER_TOKEN = 3.67  # For BPE-8192 tokenizer
     
     mode_str = "mHC" if use_mhc else "Vanilla"
     print("="*70)
@@ -442,7 +443,7 @@ def train_alternating(
             val_losses.append(loss.item())
     
     val_loss = sum(val_losses) / len(val_losses)
-    val_bpb = val_loss / math.log(2)
+    val_bpb = (val_loss / math.log(2)) * (1.0 / BYTES_PER_TOKEN)
     
     print("\n" + "="*70)
     print("[RESULTS]")
