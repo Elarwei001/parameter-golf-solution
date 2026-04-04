@@ -1,0 +1,15 @@
+Loading: /data/checkpoints/sandwich_qat/sandwich_qat_step5000.pt
+Original BPB: 1.5320517903133826
+[All FP32 (baseline)] Val Loss: 3.8949 | BPB: 1.5311
+[Embedding FP16 only] Val Loss: 3.9011 | BPB: 1.5336
+
+============================================================
+Embedding FP16 Conversion Results
+============================================================
+  FP32 embedding: Loss 3.8949 | BPB: 1.5311 | Size: 16.52 MB
+  FP16 embedding: Loss 3.9011 | BPB: 1.5336 | Size: 10.23 MB
+  Delta BPB:     +0.0024 (+0.16%)
+  Size savings:  6.29 MB
+============================================================
+
+[SAVED] /data/checkpoints/sandwich_qat/embedding_fp16_eval_results.json
