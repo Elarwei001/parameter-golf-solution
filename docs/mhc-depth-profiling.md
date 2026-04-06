@@ -31,14 +31,27 @@ When β → 0, the layer is doing near-identity mapping — it's not learning us
 - β_mlp: drops from 0.56 → 0.05 after Layer 12
 - **Layers 12-29 are near-identity** (β < 0.2)
 
-### The Paradox
+### The Real Factor: Dim, Not Depth
 
-20L at Layer 17 still has β = 0.6-0.7 (productive), but 30L at the same relative depth (~57%) has β = 0.19 (near-idle). **The model adapts its behavior to total depth** — it doesn't simply "run out of useful work" at a fixed depth.
+After comparing three models:
 
-Possible explanations:
-1. **Gradient dilution**: With 30 layers, gradients reaching early layers are weaker, so the model front-loads learning
-2. **Optimization difficulty**: 30 layers are harder to optimize, so the model finds a local minimum that under-uses deep layers
-3. **Dim effect**: 30L used dim=448 vs 20L's dim=384 — different dim may affect β distribution (this is a confounding variable)
+| Config | β_attn range | β_mlp range |
+|--------|-------------|-------------|
+| 30L dim=384 BPE | 0.49-1.05 | 0.62-0.95 |
+| 30L dim=448 BPE | 0.003-0.12 | 0.05-0.56 |
+| 20L dim=384 BPE | 0.56-1.07 | 0.63-0.87 |
+
+**The key variable is dim, not layer count.** Both dim=384 models (20L and 30L) show high β throughout. The dim=448 model shows massive β decay despite being the same 30 layers.
+
+This is counterintuitive — a larger model (dim=448, more parameters) is "lazier" than a smaller one (dim=384). Possible explanations:
+1. **Over-parameterization per layer**: dim=448 gives each layer more capacity than needed, so fewer layers need to actively contribute
+2. **Wider layers learn faster**: Each layer can accomplish more per step, so front layers solve the task before deep layers engage
+3. **Dim-dependent optimization landscape**: Larger dim changes the loss landscape, making identity shortcuts more attractive as local minima
+4. **QAT interaction**: dim=448 had ternary quantization which may interact differently with mHC at wider dimensions
+
+### Updated Conclusion
+
+**mHC β decay is primarily driven by model width (dim), not depth (layers).** Before drawing conclusions about optimal layer count, we must control for dim. The correct ablation is: same dim, vary only layers.
 
 ## Methodology: mHC Depth Profiling
 
