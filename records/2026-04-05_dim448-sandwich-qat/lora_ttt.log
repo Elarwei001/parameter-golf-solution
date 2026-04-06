@@ -1,0 +1,46 @@
+======================================================================
+Sandwich QAT 30L dim=464 + LoRA TTT Evaluation
+  dim=448, layers=30, n_heads=8, n_kv=4
+  LoRA rank=8, TTT lr=0.01, epochs=2
+  Chunk size=256
+  Checkpoint: /data/checkpoints/sandwich_qat_30l_dim448/sandwich_qat_30l_dim448_step40000.pt
+======================================================================
+
+Loading model from checkpoint...
+  Loaded checkpoint from step 40000, val_bpb=1.3805073730437845
+  Model params: 41.31M
+
+Loading validation data...
+  Val tokens: 40.5M
+
+======================================================================
+Phase 1: Standard Evaluation (no TTT)
+======================================================================
+  Pre-TTT BPB: 1.6564
+
+======================================================================
+Phase 2: LoRA TTT Evaluation (rank=8, epochs=2)
+======================================================================
+  LoRA params initialized: 0.45M
+  Applied to: Q, V of all 30 attention layers + LM head
+  Doc 10/50 | Avg Loss 2.8338 | BPB 1.1140 | Time 33s
+  Doc 20/50 | Avg Loss 2.7973 | BPB 1.0996 | Time 64s
+  Doc 30/50 | Avg Loss 2.7065 | BPB 1.0640 | Time 95s
+  Doc 40/50 | Avg Loss 2.7611 | BPB 1.0854 | Time 126s
+  Doc 50/50 | Avg Loss 2.7689 | BPB 1.0885 | Time 157s
+
+======================================================================
+RESULTS
+======================================================================
+  Checkpoint:     step 40000
+  Pre-TTT BPB:    1.6564
+  Post-TTT BPB:   1.0885
+  Improvement:    34.29%
+  TTT Time:       157s for 50 documents
+  LoRA rank:      8
+  TTT epochs:     2
+  TTT lr:         0.01
+======================================================================
+
+[SAVED] Results: /data/checkpoints/sandwich_qat_30l_dim460/lora_ttt_r8_pre1.6564_post1.0885.json
+Runner terminated.
