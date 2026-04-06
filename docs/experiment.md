@@ -154,4 +154,59 @@
 
 ---
 
-*最后更新: 2026-04-04*
+*最后更新: 2026-04-06*
+
+---
+
+## 2026-04-05
+
+### dim=464 Sandwich QAT 30L (BPE 8192)
+- **改动**: 加大 dim=464, 30层 Sandwich (6×3.0 + 21×1.2 + 3×3.0)
+- **配置**: dim=464, n_heads=8, n_kv=4, head_dim=58, 40k steps, A100-40GB
+- **结果**: Val BPB **1.3546**, LoRA+TTT BPB **1.0715** (-34.0%)
+- **发现**: LoRA+TTT 效果惊人；但模型 18.09MB 超 16MB 限制
+- **详见**: records/2026-04-05_dim464-sandwich-qat/
+
+### dim=448 Sandwich QAT 30L (BPE 8192) ⭐
+- **改动**: dim 降到 448, MLP 缩减为 2×3.0 + 28×1.2，确保 fit 16MB
+- **配置**: dim=448, n_heads=8, n_kv=4, head_dim=56, 40k steps, A100-40GB
+- **结果**: Val BPB **1.3805**, LoRA+TTT BPB **1.0885** (-34.3%)
+- **模型大小**: ~14.36MB ✅
+- **对比**: 仅比榜首 PR#1405 (1.0856) 差 0.003 BPB
+- **发现**: dim=448 + LoRA+TTT 已接近榜首水平，模型合规
+- **详见**: records/2026-04-05_dim448-sandwich-qat/
+
+---
+
+## 2026-04-06
+
+### dim=544 Sandwich QAT 30L + Scylla Tokenizer (998 vocab) 🔄
+- **改动**: 切换到 Scylla tokenizer (vocab 998), dim 提升到 544, MLP 恢复 9×3.0 + 21×1.2
+- **配置**: dim=544, n_heads=8, n_kv=4, head_dim=68, 40k steps, A100-40GB
+- **预期优势**:
+  - Embedding 从 7.34MB → 0.90MB，省 6.4MB
+  - 参数 58.09M (比 dim=448 多 41%)
+  - Scylla bytes/token ~4.13 (vs BPE ~3.67)
+  - 模型大小 ~14.75MB ✅
+- **状态**: 训练中，预计 2026-04-06 晚完成
+- **详见**: records/2026-04-06_dim544-scylla/
+
+---
+
+## 技术对比 (vs 榜首 PR #1405, 1.0856 BPB)
+
+| Technique | Us | PR #1405 | Priority |
+|-----------|-----|----------|----------|
+| Tokenizer | BPE 8192 → Scylla 998 ✅ | Scylla 998 | Done |
+| Quantization | Ternary (1.58-bit) | Full Hessian GPTQ int6 | Future |
+| Compression | None | LZMA-9 | Future |
+| Optimizer | AdamW | Parallel Muon | Future |
+| EMA/SWA | None | Yes | Easy win |
+| LoRA+TTT | ✅ | No | Our advantage |
+| BigramHash | No | 3072×112 | Future |
+| QK-Gain | No | 4.0 | Easy win |
+
+## TODO
+
+- [ ] **Alt-attn 消融实验**: 全 global attention 去掉 alt-attn，验证 mHC 参数波浪是否由 global/local 交替导致
+- [ ] **dim=448 + Scylla 消融**: 单独验证 Scylla tokenizer 的 BPB 改善（控制 dim 不变）
