@@ -37,23 +37,41 @@ Types:
 
 Example: `feat: Add MHC residual coefficient analysis`
 
-## Experiment Tracking
+## Experiment Workflow
 
-**IMPORTANT**: After every experiment, record results and insights in:
-`docs/experiments/EXPERIMENTS.md`
+All experiments are classified as **Pending** or **Verified**.
 
-Use **append-only** format — never edit or delete existing entries. This preserves full history.
+### Pending (待验证)
+- All untested ideas live in **`docs/todo.md`**
+- Include hypothesis, expected impact, and priority
+- When moving to verified, check the item off
 
-Each entry should include:
-- Date
-- Experiment name/ID
-- Hypothesis
-- Configuration (model size, hyperparams)
-- Results (BPB, loss, key metrics)
-- Conclusions/insights
-- Link to code/logs if applicable
+### Verified (已验证)
+After an experiment completes, do ALL of the following:
 
-Visualization files go to `results/figures/`, logs to `results/logs/`.
+1. **Update the log**: Add entry to `docs/experiment.md` (航海日志, append-only)
+2. **Record results**: Create a subdirectory under `results/` with:
+   - **Analysis with figures** — experiment result analysis with plots/charts
+   - **Training logs** — `train.log`, `lora_ttt.log`, etc.
+   - **Script backup** — `scripts/modal/*.py.bak` or copy of the exact script used
+3. **Update `docs/todo.md`**: Check off the verified item
+
+Example structure:
+```
+results/
+├── 2026-04-05_dim448-sandwich-qat/
+│   ├── analysis.md          # Results analysis with embedded figures
+│   ├── figures/
+│   │   └── mhc_params.png
+│   ├── train.log
+│   ├── lora_ttt.log
+│   └── modal_sandwich_qat_30l_dim448.py.bak
+```
+
+### Experiment Tracking Legacy
+
+Old records live in `records/` directory. New experiments should use `results/` structure above.
+Visualization files go to `results/figures/` or per-experiment subdirectory.
 
 ## File Organization
 
