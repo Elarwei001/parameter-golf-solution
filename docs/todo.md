@@ -5,6 +5,7 @@
 ## 高优先级
 
 - [ ] **dim=544 Scylla + LoRA+TTT 评估** — 等训练完成后跑 LoRA+TTT 评估脚本
+- [ ] **训练脚本增加 mHC 实时输出** — 每 N 步打印 α/β 参数，方便训练过程中观察层利用率变化
 - [ ] **QAT 触发条件改为 BPB 阈值** — 用 `ema_loss / ln(2) / BYTES_PER_TOKEN` 替代固定 loss 阈值，使不同 tokenizer 的 QAT 触发时机一致
 - [ ] **TTT 超参调优** — 尝试 rank=16, epochs=3, 更多 docs，看能否进一步降低 BPB
 
@@ -12,6 +13,8 @@
 
 - [ ] **Alt-attn 消融实验** — 跑一个全 global attention（去掉 alt-attn）的 dim=544 Scylla，对比 mHC 参数曲线是否还有波浪起伏。验证波浪是否由 global/local 交替导致。
 - [ ] **dim=448 + Scylla 消融** — 单独验证 Scylla tokenizer 的 BPB 改善（控制 dim 不变，只换 tokenizer）
+- [ ] **dim=448 + 20L 消融** — 验证 β 衰减是 dim 导致还是层数导致。dim=448 30L β 衰减严重，dim=384 30L β 全程高。需要 dim=448 20L 对比
+- [ ] **dim=384 30L 跑 40k 步** — 当前只有 5k 步，验证 β 是否在充分训练后也会衰减。dim=544 Scylla 30k 步 β≈1.0 可能只是还没分化
 - [ ] **Depth Recurrence 实验** — 学 6 层权重循环 5 遍（等效 30 层），大幅省参数。参考 Universal Transformer + PR #1204
 - [ ] **深层去掉 Attention 实验** — 30L mHC 显示深层 β_attn≈0.003，attention 几乎被忽略。尝试深层（>20层）改为 MLP-only，省参数给浅层
 - [ ] **减少 3.0x MLP 层数** — mHC 显示只有前 2 层 β_mlp 高，9× 3.0x MLP 是浪费。尝试 2-4× 3.0x + 其余 1.2x
