@@ -170,11 +170,21 @@
 ### dim=448 Sandwich QAT 30L (BPE 8192) ⭐
 - **改动**: dim 降到 448, MLP 缩减为 2×3.0 + 28×1.2，确保 fit 16MB
 - **配置**: dim=448, n_heads=8, n_kv=4, head_dim=56, 40k steps, A100-40GB
-- **结果**: Val BPB **1.3805**, LoRA+TTT BPB **1.0885** (-34.3%)
+- **结果**: Val BPB **1.3805**, 旧版 LoRA+TTT 记录 **1.0885**
 - **模型大小**: ~14.36MB ✅
-- **对比**: 仅比榜首 PR#1405 (1.0856) 差 0.003 BPB
-- **发现**: dim=448 + LoRA+TTT 已接近榜首水平，模型合规
+- **后续复核**: 改写为更接近 leaderboard 的 legal score-first TTT 后，A100 复跑只有 **~1.524x BPB**，说明原先 1.0885 不能直接视为当前 leaderboard 口径下的 legal TTT 结果
+- **发现**: dim=448 基座仍可用，但此前强 TTT 提升主要来自非当前 legal score-first 设定
 - **详见**: records/2026-04-05_dim448-sandwich-qat/
+
+### 11L Depth Compare (baseline vs recurrence vs sandwich+mHC)
+- **改动**: 做一个干净的三组基座对照，只比较深度利用方式，不加 TTT
+- **配置**: SP8192, dim=448, 11 物理层, 5k steps, A100-40GB
+- **结果**:
+  - baseline: **1.4936** (`23.55M` params)
+  - sandwich+mHC: **1.4887** (`19.93M` params)
+  - recurrence: 跑到 step 4500 但未保留最终 validation
+- **发现**: 在这个小预算短跑设定下，**sandwich+mHC 以更少参数小胜 baseline**；recurrence 至少在前 4500 step 没表现出明显压倒性优势，但需要一次完整保留结果的 rerun 才能下最终结论
+- **详见**: records/2026-04-13_depth-compare-11l/
 
 ---
 
