@@ -49,7 +49,7 @@ if modal is not None:
         image=image,
         gpu="A100-40GB",
         volumes={"/data": data_volume},
-        timeout=7200,
+        timeout=14400,
     )
     def train_compare(
         mode: str = "baseline",
@@ -63,6 +63,8 @@ if modal is not None:
         batch_size: int = 64,
         seq_len: int = 256,
         steps: int = 5000,
+        checkpoint_every: int = 500,
+        resume_checkpoint: str = "",
     ):
         import json
         import time
@@ -90,14 +92,18 @@ if modal is not None:
         print(f"  dim={dim}, n_layers={n_layers}, heads={n_heads}/{n_kv_heads}, steps={steps}")
         print(f"  use_mhc={use_mhc}, use_recurrence={use_recurrence}")
         print(f"  mlp_scales={mlp_scales}")
+        print(f"  checkpoint_every={checkpoint_every}")
+        print(f"  resume_checkpoint={resume_checkpoint or 'NONE'}")
         if use_recurrence:
             print(f"  recurrence loop: layers {RECURRENCE_LAYER_RANGE[0]}-{RECURRENCE_LAYER_RANGE[1]-1} replayed once")
         print("=" * 72)
+        print("[DATA] Listing dataset shards...")
 
         train_files = sorted([f for f in os.listdir(data_dir) if 'train' in f])
         val_files = sorted([f for f in os.listdir(data_dir) if 'val' in f])
 
         train_data = []
+        print("[DATA] Loading train shards...")
         for f in train_files[:5]:
             with open(os.path.join(data_dir, f), 'rb') as fp:
                 fp.seek(header_size)
@@ -105,13 +111,16 @@ if modal is not None:
             train_data.append(data)
         train_tokens = torch.from_numpy(np.concatenate(train_data).astype(np.int64))
 
+        print(f"[DATA] Train tokens loaded: {len(train_tokens)/1e6:.1f}M")
         val_data = []
+        print("[DATA] Loading val shards...")
         for f in val_files:
             with open(os.path.join(data_dir, f), 'rb') as fp:
                 fp.seek(header_size)
                 data = np.frombuffer(fp.read(), dtype=np.uint16)
             val_data.append(data)
         val_tokens = torch.from_numpy(np.concatenate(val_data).astype(np.int64))
+        print(f"[DATA] Val tokens loaded: {len(val_tokens)/1e6:.1f}M")
 
         class RMSNorm(nn.Module):
             def __init__(self, width, eps=1e-6):
@@ -271,6 +280,18 @@ if modal is not None:
         total_params = sum(p.numel() for p in model.parameters())
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.1)
         min_lr_ratio = 0.1
+        checkpoint_dir = f"/data/checkpoints/depth_compare/{mode}"
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        progress_path = os.path.join(checkpoint_dir, "progress.json")
+        start_step = 0
+
+        if resume_checkpoint:
+            print(f"[RESUME] Loading checkpoint: {resume_checkpoint}")
+            ckpt = torch.load(resume_checkpoint, map_location=device)
+            model.load_state_dict(ckpt['model_state_dict'])
+            optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+            start_step = int(ckpt.get('step', 0))
+            print(f"[RESUME] Resuming from step {start_step}")
 
         def get_batch(split):
             data = train_tokens if split == 'train' else val_tokens
@@ -286,8 +307,52 @@ if modal is not None:
             progress = (step - 200) / (steps - 200)
             return min_lr_ratio + 0.5 * (1 - min_lr_ratio) * (1 + math.cos(math.pi * progress))
 
+        def save_progress(step, latest_loss, stage):
+            payload = {
+                'mode': mode,
+                'step': step,
+                'steps': steps,
+                'latest_loss': float(latest_loss) if latest_loss is not None else None,
+                'stage': stage,
+                'resume_checkpoint': resume_checkpoint or None,
+            }
+            with open(progress_path, 'w') as f:
+                json.dump(payload, f, indent=2)
+
+        def save_checkpoint(step, latest_loss, tag=None):
+            suffix = f"_{tag}" if tag else ""
+            ckpt_path = os.path.join(checkpoint_dir, f"{mode}_step{step}{suffix}.pt")
+            print(f"[CHECKPOINT] Saving checkpoint to {ckpt_path}")
+            torch.save({
+                'step': step,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'config': {
+                    'mode': mode,
+                    'seed': seed,
+                    'dim': dim,
+                    'n_layers': n_layers,
+                    'n_heads': n_heads,
+                    'n_kv_heads': n_kv_heads,
+                    'local_window': local_window,
+                    'lr': lr,
+                    'batch_size': batch_size,
+                    'seq_len': seq_len,
+                    'steps': steps,
+                    'checkpoint_every': checkpoint_every,
+                    'use_mhc': use_mhc,
+                    'use_recurrence': use_recurrence,
+                    'mlp_scales': mlp_scales,
+                    'recurrence_layer_range': RECURRENCE_LAYER_RANGE if use_recurrence else None,
+                },
+                'latest_loss': float(latest_loss) if latest_loss is not None else None,
+            }, ckpt_path)
+            print("[CHECKPOINT] Save complete")
+            return ckpt_path
+
         start_time = time.time()
-        for step in range(1, steps + 1):
+        print(f"[TRAIN] Starting loop from step {start_step + 1} to {steps}")
+        for step in range(start_step + 1, steps + 1):
             for group in optimizer.param_groups:
                 group['lr'] = lr * cosine_lr(step)
             x, y = get_batch('train')
@@ -299,6 +364,12 @@ if modal is not None:
             if step % 500 == 0:
                 elapsed = time.time() - start_time
                 print(f"Step {step}/{steps} | Loss {loss.item():.4f} | LR {optimizer.param_groups[0]['lr']:.2e} | Time {elapsed:.0f}s")
+                save_progress(step, loss.item(), stage='train')
+            if checkpoint_every > 0 and step % checkpoint_every == 0:
+                save_checkpoint(step, loss.item())
+                print("[CHECKPOINT] Committing volume after periodic save...")
+                data_volume.commit()
+                print("[CHECKPOINT] Volume commit complete")
             if use_mhc and step % 2500 == 0:
                 print(f"\n[mHC @ step {step}]")
                 for block in model.blocks:
@@ -306,6 +377,8 @@ if modal is not None:
                     if p is not None:
                         print(f"  L{p['layer']:02d} {p['attn_type']:<12} mlp={p['mlp_scale']:.1f} aA={p['alpha_attn']:.3f} bA={p['beta_attn']:.3f} aM={p['alpha_mlp']:.3f} bM={p['beta_mlp']:.3f}")
 
+        print("[VAL] Entering validation...")
+        save_progress(steps, loss.item() if 'loss' in locals() else None, stage='validation')
         model.eval()
         val_losses = []
         with torch.no_grad():
@@ -316,8 +389,6 @@ if modal is not None:
         val_loss = sum(val_losses) / len(val_losses)
         val_bpb = (val_loss / math.log(2)) * (1.0 / bytes_per_token)
 
-        checkpoint_dir = f"/data/checkpoints/depth_compare/{mode}"
-        os.makedirs(checkpoint_dir, exist_ok=True)
         result = {
             'mode': mode,
             'config': {
@@ -344,16 +415,21 @@ if modal is not None:
             result['final_mhc'] = [block.mhc_params() for block in model.blocks]
 
         results_path = os.path.join(checkpoint_dir, f"{mode}_bpb{val_bpb:.4f}.json")
+        print(f"[SAVE] Writing results json to {results_path}")
         with open(results_path, 'w') as f:
             json.dump(result, f, indent=2)
         ckpt_path = os.path.join(checkpoint_dir, f"{mode}_step{steps}.pt")
+        print(f"[SAVE] Writing final checkpoint to {ckpt_path}")
         torch.save({
             'step': steps,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'result': result,
         }, ckpt_path)
+        save_progress(steps, val_loss, stage='finished')
+        print("[SAVE] Committing volume after final save...")
         data_volume.commit()
+        print("[SAVE] Final volume commit complete")
 
         print("\n" + "=" * 72)
         print(f"[RESULT] {mode.upper()}")
@@ -378,6 +454,8 @@ if modal is not None:
         batch_size: int = 64,
         seq_len: int = 256,
         steps: int = 5000,
+        checkpoint_every: int = 500,
+        resume_checkpoint: str = "",
     ):
         assert mode in ("baseline", "recurrence", "sandwich")
         result = train_compare.remote(
@@ -392,6 +470,8 @@ if modal is not None:
             batch_size=batch_size,
             seq_len=seq_len,
             steps=steps,
+            checkpoint_every=checkpoint_every,
+            resume_checkpoint=resume_checkpoint,
         )
         print(f"[FINAL] {result['mode']} bpb={result['val_bpb']:.4f} params={result['total_params']/1e6:.2f}M")
 else:

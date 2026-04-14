@@ -182,8 +182,8 @@
 - **结果**:
   - baseline: **1.4936** (`23.55M` params)
   - sandwich+mHC: **1.4887** (`19.93M` params)
-  - recurrence: 跑到 step 4500 但未保留最终 validation
-- **发现**: 在这个小预算短跑设定下，**sandwich+mHC 以更少参数小胜 baseline**；recurrence 至少在前 4500 step 没表现出明显压倒性优势，但需要一次完整保留结果的 rerun 才能下最终结论
+  - recurrence: **1.4957** (`23.55M` params, 由 step 4000 checkpoint 续跑完成)
+- **发现**: 在这个小预算短跑设定下，**sandwich+mHC 以更少参数胜出**；plain baseline 第二；简单 replay 中层的 recurrence 第三，说明这套 recurrence 在当前设定下没有带来收益
 - **详见**: records/2026-04-13_depth-compare-11l/
 
 ---

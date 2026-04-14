@@ -46,7 +46,7 @@ This experiment intentionally compares **base-model quality only**. No TTT was u
 | Variant | Val loss | Val BPB | Params | Runtime |
 |---|---:|---:|---:|---:|
 | baseline | 3.7995 | 1.4936 | 23.55M | 1192s |
-| recurrence | not finished | not finished | ~23.55M | stopped after 4500 steps / 1241s |
+| recurrence | 3.8047 | 1.4957 | 23.55M | resumed from step 4000, final 1000 steps completed |
 | sandwich | 3.7871 | 1.4887 | 19.93M | 1194s |
 
 ## Key takeaways
@@ -59,9 +59,9 @@ This experiment intentionally compares **base-model quality only**. No TTT was u
    - baseline: `23.55M`
    - sandwich: `19.93M`
 
-3. **recurrence did not complete** because the Modal app stopped when the local client disconnected.
-   - Last visible training log was `step 4500`, `loss 3.7816`, runtime `1241s`
-   - No final validation result was captured for this run
+3. **recurrence was eventually completed via resume from checkpoint**, and it ended up slightly worse than baseline.
+   - final: `val_loss=3.8047`, `val_bpb=1.4957`
+   - this makes the ranking clear: `sandwich < baseline < recurrence` in BPB terms
 
 4. For future reruns, do not rely on local OpenClaw `SIGTERM` as a failure signal.
    - Modal remote jobs can continue after local process tracking changes
@@ -70,7 +70,8 @@ This experiment intentionally compares **base-model quality only**. No TTT was u
 ## Logged Modal runs
 
 - baseline app id: `ap-AzFAcbZKXpjCWJtT6qbLom`
-- recurrence app id: `ap-R4lMVKid8qfw1H1fftnRtd`
+- recurrence initial app id: `ap-R4lMVKid8qfw1H1fftnRtd`
+- recurrence resumed app id: `ap-2GBkuwTmdqSVCCCctqnYjt`
 - sandwich app id: `ap-3Fz0Ike7Zt0qXrsWdananP`
 
 ## Raw logs extracted
@@ -89,16 +90,19 @@ This experiment intentionally compares **base-model quality only**. No TTT was u
 - final: `val_loss=3.7995`, `val_bpb=1.4936`
 
 ### recurrence
-- `Step 500/5000 | Loss 5.0821 | LR 9.91e-04 | Time 140s`
-- `Step 1000/5000 | Loss 4.5694 | LR 9.40e-04 | Time 277s`
-- `Step 1500/5000 | Loss 4.3995 | LR 8.47e-04 | Time 415s`
-- `Step 2000/5000 | Loss 4.1707 | LR 7.22e-04 | Time 553s`
-- `Step 2500/5000 | Loss 4.0441 | LR 5.79e-04 | Time 690s`
-- `Step 3000/5000 | Loss 3.8550 | LR 4.34e-04 | Time 828s`
-- `Step 3500/5000 | Loss 3.9731 | LR 3.00e-04 | Time 966s`
-- `Step 4000/5000 | Loss 3.9647 | LR 1.93e-04 | Time 1103s`
-- `Step 4500/5000 | Loss 3.7816 | LR 1.24e-04 | Time 1241s`
-- no final validation captured
+- initial run logs:
+  - `Step 500/5000 | Loss 5.0821 | LR 9.91e-04 | Time 140s`
+  - `Step 1000/5000 | Loss 4.5694 | LR 9.40e-04 | Time 277s`
+  - `Step 1500/5000 | Loss 4.3995 | LR 8.47e-04 | Time 415s`
+  - `Step 2000/5000 | Loss 4.1707 | LR 7.22e-04 | Time 553s`
+  - `Step 2500/5000 | Loss 4.0441 | LR 5.79e-04 | Time 690s`
+  - `Step 3000/5000 | Loss 3.8550 | LR 4.34e-04 | Time 828s`
+  - `Step 3500/5000 | Loss 3.9731 | LR 3.00e-04 | Time 966s`
+  - `Step 4000/5000 | Loss 3.9647 | LR 1.93e-04 | Time 1103s`
+  - `Step 4500/5000 | Loss 3.7816 | LR 1.24e-04 | Time 1241s`
+- resumed/final run:
+  - resumed from `recurrence_step4000.pt`
+  - final: `val_loss=3.8047`, `val_bpb=1.4957`
 
 ### sandwich
 - `Step 500/5000 | Loss 5.0613 | LR 9.91e-04 | Time 123s`
