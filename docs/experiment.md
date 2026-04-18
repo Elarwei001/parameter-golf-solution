@@ -117,6 +117,17 @@
 - **发现**: 加深层数有效！30L 比 20L 奮 0.0106 BPB；但 QAT 退化仍是主要瓶颈（vs FP32 baseline +1.27%）；训练时间 2439s (+46%)
 - **详见**: records/2026-04-04_sandwich-qat-30l/
 
+### Sandwich Late QAT at Step 3000
+- **改动**: 固定延后 QAT，在前 3000 steps 保持 FP32，再切入 ternary QAT
+- **配置**: dim=384, 20L, Sandwich MLP + mHC, `qat_start_step=3000`, 总步数 5000
+- **结果**: BPB **1.5268**，Val loss **3.8839**，量化大小 **16.52MB**
+- **对比**:
+  - 比 prior late QAT step 4000 (`1.5412`) **更好 0.0144 BPB**
+  - 比 adaptive QAT 20L (`1.5321`) **更好 0.0053 BPB**
+  - 但仍比 Sandwich FP32 (`1.4833`) **差 2.93%**
+- **发现**: 把 QAT 从 step 4000 提前到 step 3000 确实有帮助，说明 1000 QAT steps 太短；但这条线依然没有解决 QAT 退化，量化仍是主瓶颈
+- **详见**: records/2026-04-17_sandwich-late-qat-3000/
+
 ---
 
 ## 历史实验 (2026-03-31 / 04-01)

@@ -41,10 +41,10 @@ Vocab 32K  → Embedding uses 6 MB (too much!)
 
 ## 📊 Experiment Details
 
-See [docs/experiments/EXPERIMENTS.md](docs/experiments/EXPERIMENTS.md) for full experiment logs.
+See [docs/experiment.md](docs/experiment.md) for the main experiment log.
 
 ### 🆕 mHC DeepSeek Residual Study
-See [docs/experiments/MHC_ANALYSIS.md](docs/experiments/MHC_ANALYSIS.md) for our study on learnable layer-wise residual coefficients inspired by DeepSeek-V3.
+See [docs/mhc-depth-profiling.md](docs/mhc-depth-profiling.md) for our study on learnable layer-wise residual coefficients inspired by DeepSeek-V3.
 
 **新发现**: 异常层规律 — 11L/20L/32L 模型均在 ~90% 深度出现 β 峰值
 
@@ -94,22 +94,16 @@ GPT with QAT
 ```
 parameter-golf-solution/
 ├── scripts/
-│   ├── modal/              # Modal 云端训练脚本
-│   │   ├── modal_mhc_v2_deep.py    # mHC 实验 (baseline)
-│   │   ├── modal_alternating_attn.py # Alternating Attention
-│   │   ├── modal_ple_v2.py         # PLE 实验
-│   │   ├── modal_qat.py            # QAT 量化训练
-│   │   └── modal_xsa_ttt.py        # XSA + TTT
-│   └── local/              # 本地测试脚本
-├── BASELINE_CONFIG.md      # 标准实验配置 (必读)
-├── models/                 # 模型定义
-├── docs/                   # 文档
-│   ├── experiments/        # 实验记录
-│   ├── analysis/           # 深度分析
-│   └── techniques/         # 技术笔记
-└── results/                # 实验结果
-    ├── figures/            # 图表
-    └── logs/               # JSON 日志
+│   └── modal/              # Modal 云端训练脚本
+├── docs/
+│   ├── experiment.md       # 主实验航海日志
+│   ├── mhc-depth-profiling.md
+│   ├── technique-analysis-cmp-pr1405.md
+│   ├── todo.md
+│   └── reference/          # 技术参考笔记
+├── records/                # 单次实验记录、report、log、README
+└── results/
+    └── logs/               # 汇总 JSON / 提交结果
 ```
 
 ---
@@ -172,4 +166,4 @@ modal run --detach scripts/modal/modal_alternating_attn.py -- --mhc
 
 ---
 
-*Last updated: 2026-04-03*
+*Last updated: 2026-04-18*
