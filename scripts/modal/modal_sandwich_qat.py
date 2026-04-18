@@ -14,7 +14,18 @@ mHC parameters are trained from scratch (not quantized, kept as FP32).
 
 ## Run
 ```bash
-modal run --detach scripts/modal/modal_sandwich_qat.py
+# Late QAT at step 3000 (recommended current test)
+modal run --detach scripts/modal/modal_sandwich_qat.py::train_sandwich_qat \
+  --steps 5000 \
+  --qat-start-step 3000 \
+  --checkpoint-every 1000
+
+# QAT ramp: start blending at step 2000, fully quantized by step 3000
+modal run --detach scripts/modal/modal_sandwich_qat.py::train_sandwich_qat \
+  --steps 5000 \
+  --qat-start-step 2000 \
+  --qat-ramp-steps 1000 \
+  --checkpoint-every 1000
 ```
 
 ## Related
@@ -59,6 +70,7 @@ def train_sandwich_qat(
     steps: int = 5000,
     warmup_steps: int = 500,
     qat_start_step: int = -1,  # -1 = auto (adaptive), 0 = from start, >0 = fixed step
+    qat_ramp_steps: int = 0,  # 0 = hard switch, >0 = linearly ramp FP32->QAT after qat_start_step
     qat_warmup_steps: int = 2000,  # min FP32 steps before auto-switch
     loss_ema_alpha: float = 0.99,  # EMA smoothing for loss tracking
     qat_switch_threshold: float = 0.001,  # switch when loss_rate < this
@@ -88,7 +100,10 @@ def train_sandwich_qat(
     print("Sandwich MLP + QAT + mHC (from scratch)")
     print(f"  dim={dim}, layers={n_layers}")
     print(f"  MLP scales: {mlp_scales}")
-    print(f"  QAT: Ternary (1.58-bit), mode={'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'}")
+    qat_mode = 'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'
+    if qat_ramp_steps > 0 and qat_start_step >= 0:
+        qat_mode += f' with ramp {qat_ramp_steps} steps'
+    print(f"  QAT: Ternary (1.58-bit), mode={qat_mode}")
     print(f"  mHC: FP32, init to 1.0, learned from scratch")
     print("=" * 70)
 
@@ -144,16 +159,24 @@ def train_sandwich_qat(
             nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
             self.register_parameter('bias', None)
             self.qat_enabled = False
+            self.qat_alpha = 1.0
 
         def forward(self, x):
             if self.qat_enabled:
-                w = ternary_quantize(self.weight)
+                w_q = ternary_quantize(self.weight)
+                if self.qat_alpha < 1.0:
+                    w = (1.0 - self.qat_alpha) * self.weight + self.qat_alpha * w_q
+                else:
+                    w = w_q
             else:
                 w = self.weight
             return F.linear(x, w, self.bias)
 
         def enable_qat(self):
             self.qat_enabled = True
+
+        def set_qat_alpha(self, alpha: float):
+            self.qat_alpha = float(max(0.0, min(1.0, alpha)))
 
     # Model definition
     class RMSNorm(nn.Module):
@@ -318,6 +341,11 @@ def train_sandwich_qat(
                 if isinstance(module, QATLinear):
                     module.enable_qat()
 
+        def set_qat_alpha(self, alpha: float):
+            for module in self.modules():
+                if isinstance(module, QATLinear):
+                    module.set_qat_alpha(alpha)
+
         def count_params(self):
             ternary = 0
             fp = 0
@@ -349,6 +377,7 @@ def train_sandwich_qat(
     # Enable QAT from the start
     if qat_start_step == 0:
         model.enable_qat()
+        model.set_qat_alpha(0.0 if qat_ramp_steps > 0 else 1.0)
         print("[QAT] Enabled from step 0")
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -409,6 +438,7 @@ def train_sandwich_qat(
     # Resume from checkpoint if specified
     start_step = 0
     qat_enabled = (qat_start_step == 0)
+    qat_alpha = 0.0 if (qat_enabled and qat_ramp_steps > 0) else (1.0 if qat_enabled else 0.0)
     ema_loss = None
     qat_actual_step = None
     mhc_history = []
@@ -425,12 +455,15 @@ def train_sandwich_qat(
         if qat_actual_step is not None and qat_actual_step <= start_step:
             model.enable_qat()
             qat_enabled = True
+            if qat_ramp_steps > 0:
+                qat_alpha = min(1.0, max(0.0, (start_step - qat_actual_step) / qat_ramp_steps))
+                model.set_qat_alpha(qat_alpha)
             print(f"  Resumed from step {start_step}, QAT was enabled at step {qat_actual_step}")
         else:
             print(f"  Resumed from step {start_step}, QAT not yet enabled")
         print(f"  Previous val BPB: {ckpt.get('val_bpb', 'N/A')}")
 
-    print(f"\n[TRAIN] Starting training from step {start_step+1} to {steps} (QAT mode={'auto (adaptive)' if qat_start_step == -1 else f'from step {qat_start_step}'})...\n")
+    print(f"\n[TRAIN] Starting training from step {start_step+1} to {steps} (QAT mode={qat_mode})...\n")
     start_time = time.time()
 
     def save_checkpoint(step, model, optimizer, qat_actual_step, mhc_history, qat_enabled):
@@ -449,6 +482,7 @@ def train_sandwich_qat(
                 'dim': dim, 'n_layers': n_layers, 'n_heads': n_heads,
                 'n_kv_heads': n_kv_heads, 'local_window': local_window,
                 'steps': steps, 'qat_start_step': qat_start_step,
+                'qat_ramp_steps': qat_ramp_steps,
                 'qat_warmup_steps': qat_warmup_steps,
                 'qat_switch_threshold': qat_switch_threshold,
                 'loss_ema_alpha': loss_ema_alpha,
@@ -465,6 +499,13 @@ def train_sandwich_qat(
             qat_enabled = True
             qat_actual_step = step
             print(f"\n[QAT] Enabled at fixed step {step}\n")
+
+        if qat_enabled:
+            if qat_ramp_steps > 0 and qat_actual_step is not None:
+                qat_alpha = min(1.0, max(0.0, (step - qat_actual_step) / qat_ramp_steps))
+            else:
+                qat_alpha = 1.0
+            model.set_qat_alpha(qat_alpha)
 
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr * cosine_lr(step)
@@ -493,6 +534,8 @@ def train_sandwich_qat(
                         model.enable_qat()
                         qat_enabled = True
                         qat_actual_step = step
+                        qat_alpha = 0.0 if qat_ramp_steps > 0 else 1.0
+                        model.set_qat_alpha(qat_alpha)
                         print(f"\n[QAT] Adaptive switch at step {step}!")
                         print(f"  EMA Loss: {ema_loss:.4f}")
                         print(f"  Loss rate: {loss_rate:.6f} < threshold {qat_switch_threshold}")
@@ -501,7 +544,7 @@ def train_sandwich_qat(
         if step % 100 == 0:
             elapsed = time.time() - start_time
             current_lr = optimizer.param_groups[0]['lr']
-            qat_status = "QAT" if qat_enabled else "FP32"
+            qat_status = f"QAT(a={qat_alpha:.2f})" if qat_enabled else "FP32"
             ema_str = f" | EMA {ema_loss:.4f}" if ema_loss is not None else ""
             rate_str = ""
             if not qat_enabled and qat_start_step == -1 and step >= qat_warmup_steps and ema_loss is not None:
@@ -568,6 +611,7 @@ def train_sandwich_qat(
             'n_kv_heads': n_kv_heads, 'local_window': local_window,
             'steps': steps, 'lr': lr, 'batch_size': batch_size, 'seq_len': seq_len,
             'mlp_scales': mlp_scales, 'qat_start_step': qat_start_step,
+            'qat_ramp_steps': qat_ramp_steps,
             'qat_actual_step': qat_actual_step,
             'qat_switch_threshold': qat_switch_threshold,
             'loss_ema_alpha': loss_ema_alpha,
@@ -612,13 +656,15 @@ def train_sandwich_qat(
 
 @app.local_entrypoint()
 def main(
-    qat_start_step: int = -1,  # -1 = auto, 0 = from start
+    qat_start_step: int = 3000,  # default to Late QAT test
+    qat_ramp_steps: int = 0,
     qat_warmup_steps: int = 500,
     qat_switch_threshold: float = 0.001,
     resume_checkpoint: str = "",  # e.g. "/data/checkpoints/sandwich_qat/sandwich_qat_step3000.pt"
 ):
     result = train_sandwich_qat.remote(
         qat_start_step=qat_start_step,
+        qat_ramp_steps=qat_ramp_steps,
         qat_warmup_steps=qat_warmup_steps,
         qat_switch_threshold=qat_switch_threshold,
         resume_checkpoint=resume_checkpoint,
